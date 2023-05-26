@@ -1,7 +1,12 @@
 package test
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"math/rand"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -85,6 +90,108 @@ func ParseRPCKeyDescriptor(t testing.TB,
 		},
 		PubKey: pubKey,
 	}
+}
+
+func ParsePubKey(t testing.TB, key string) *btcec.PublicKey {
+	t.Helper()
+
+	pkBytes, err := hex.DecodeString(key)
+	require.NoError(t, err)
+
+	pk, err := btcec.ParsePubKey(pkBytes)
+	require.NoError(t, err)
+
+	return pk
+}
+
+func ParseOutPoint(t testing.TB, op string) wire.OutPoint {
+	parts := strings.Split(op, ":")
+	require.Len(t, parts, 2)
+
+	hash := ParseChainHash(t, parts[0])
+
+	outputIndex, err := strconv.Atoi(parts[1])
+	require.NoError(t, err)
+
+	return wire.OutPoint{
+		Hash:  hash,
+		Index: uint32(outputIndex),
+	}
+}
+
+func ParseChainHash(t testing.TB, hash string) chainhash.Hash {
+	require.Equal(t, chainhash.HashSize, hex.DecodedLen(len(hash)))
+
+	h, err := chainhash.NewHashFromStr(hash)
+	require.NoError(t, err)
+	return *h
+}
+
+func Parse32Byte(t testing.TB, b string) [32]byte {
+	t.Helper()
+
+	require.Equal(t, hex.EncodedLen(32), len(b))
+
+	var result [32]byte
+	_, err := hex.Decode(result[:], []byte(b))
+	require.NoError(t, err)
+
+	return result
+}
+
+func Parse33Byte(t testing.TB, b string) [33]byte {
+	t.Helper()
+
+	require.Equal(t, hex.EncodedLen(33), len(b))
+
+	var result [33]byte
+	_, err := hex.Decode(result[:], []byte(b))
+	require.NoError(t, err)
+
+	return result
+}
+
+func ParseHex(t testing.TB, b string) []byte {
+	t.Helper()
+
+	result, err := hex.DecodeString(b)
+	require.NoError(t, err)
+
+	return result
+}
+
+func ParseSchnorrSig(t testing.TB, sigHex string) schnorr.Signature {
+	t.Helper()
+
+	require.Len(t, sigHex, hex.EncodedLen(schnorr.SignatureSize))
+
+	sigBytes, err := hex.DecodeString(sigHex)
+	require.NoError(t, err)
+
+	sig, err := schnorr.ParseSignature(sigBytes)
+	require.NoError(t, err)
+
+	return *sig
+}
+
+func ParseTestVectors(t testing.TB, fileName string, target any) {
+	fileBytes, err := os.ReadFile(fileName)
+	require.NoError(t, err)
+
+	err = json.Unmarshal(fileBytes, target)
+	require.NoError(t, err)
+}
+
+func HexPubKey(pk *btcec.PublicKey) string {
+	return hex.EncodeToString(pk.SerializeCompressed())
+}
+
+func HexSchnorrPubKey(pk *btcec.PublicKey) string {
+	return hex.EncodeToString(schnorr.SerializePubKey(pk))
+}
+
+func HexSignature(sig *schnorr.Signature) string {
+	return hex.EncodeToString(sig.Serialize())
 }
 
 func ComputeTaprootScript(t testing.TB, taprootKey *btcec.PublicKey) []byte {

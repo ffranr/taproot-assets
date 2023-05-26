@@ -12,6 +12,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/lightninglabs/taproot-assets/internal/test"
 	"github.com/lightninglabs/taproot-assets/mssmt"
 	"github.com/lightningnetwork/lnd/keychain"
 	"github.com/stretchr/testify/require"
@@ -432,4 +433,66 @@ func TestDecodeHex(t *testing.T) {
 	a := &Asset{}
 	err = a.Decode(bytes.NewReader(rawBytes))
 	require.NoError(t, err)
+}
+
+// TestBIPTestVectors tests that the BIP test vectors are passing.
+func TestBIPTestVectors(t *testing.T) {
+	t.Parallel()
+
+	testVectors := &TestVectors{}
+	test.ParseTestVectors(
+		t, "testdata/asset_tlv_encoding.json", &testVectors,
+	)
+
+	for _, validCase := range testVectors.ValidTestCases {
+		validCase := validCase
+
+		t.Run(validCase.Comment, func(tt *testing.T) {
+			tt.Parallel()
+
+			a := validCase.Asset.ToAsset(tt)
+
+			var buf bytes.Buffer
+			err := a.Encode(&buf)
+			require.NoError(tt, err)
+
+			areEqual := validCase.Expected == hex.EncodeToString(
+				buf.Bytes(),
+			)
+
+			// Create nice diff if things don't match.
+			if !areEqual {
+				expectedBytes, err := hex.DecodeString(
+					validCase.Expected,
+				)
+				require.NoError(tt, err)
+
+				expectedAsset := &Asset{}
+				err = expectedAsset.Decode(bytes.NewReader(
+					expectedBytes,
+				))
+				require.NoError(tt, err)
+
+				require.Equal(tt, a, expectedAsset)
+
+				// Make sure we still fail the test.
+				require.Equal(
+					tt, validCase.Expected,
+					hex.EncodeToString(buf.Bytes()),
+				)
+			}
+		})
+	}
+
+	for _, invalidCase := range testVectors.ErrorTestCases {
+		invalidCase := invalidCase
+
+		t.Run(invalidCase.Comment, func(tt *testing.T) {
+			tt.Parallel()
+
+			require.PanicsWithValue(t, invalidCase.Error, func() {
+				invalidCase.Asset.ToAsset(tt)
+			})
+		})
+	}
 }
