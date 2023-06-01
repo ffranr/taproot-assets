@@ -1,6 +1,7 @@
 package mssmt
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -18,6 +19,49 @@ type Proof struct {
 	// Nodes represents the siblings that should be hashed with the leaf and
 	// its parents to arrive at the root of the MS-SMT.
 	Nodes []Node
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+//
+// NOTE: This implementation is necessary because the Nodes field in its
+// uncompressed form contains too many elements. Here we return a map of the
+// non-empty nodes keyed on their index in the proof.
+func (p *Proof) MarshalJSON() ([]byte, error) {
+	compressedProof := p.Compress()
+
+	nodes := make(map[int]Node)
+	nodeIdx := 0
+
+	for idx, _ := range compressedProof.Bits {
+		isEmpty := compressedProof.Bits[idx]
+		if !isEmpty {
+			nodes[idx] = compressedProof.Nodes[nodeIdx]
+			nodeIdx++
+		}
+	}
+
+	// Marshal the map to JSON
+	return json.Marshal(nodes)
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+//
+// NOTE: This function effectively reverses the marshalling done in
+// MarshalJSON. See that function for more details.
+func (p *Proof) UnmarshalJSON(data []byte) error {
+	nodes := make(map[int]Node)
+	err := json.Unmarshal(data, &nodes)
+	if err != nil {
+		return err
+	}
+
+	baseNodes := EmptyTree[:MaxTreeLevels]
+	for idx, node := range nodes {
+		baseNodes[idx] = node
+	}
+
+	p.Nodes = baseNodes
+	return nil
 }
 
 // CompressedProof represents a compressed MS-SMT merkle proof. Since merkle
