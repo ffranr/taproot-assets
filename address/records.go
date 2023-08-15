@@ -5,6 +5,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/commitment"
 	"github.com/lightningnetwork/lnd/tlv"
+	"net/url"
 )
 
 // addressTlvType represents the different TLV types for Address TLV records.
@@ -32,6 +33,9 @@ const (
 
 	// addrAmountType is the TLV type of the amount of the asset.
 	addrAmountType addressTLVType = 8
+
+	// addrProofCourierType is the TLV type of the proof courier address.
+	addrProofCourierAddrType addressTLVType = 10
 )
 
 func newAddressVersionRecord(version *asset.Version) tlv.Record {
@@ -89,5 +93,18 @@ func newAddressAmountRecord(amount *uint64) tlv.Record {
 	return tlv.MakeDynamicRecord(
 		addrAmountType, amount, recordSize,
 		asset.VarIntEncoder, asset.VarIntDecoder,
+	)
+}
+
+func newProofCourierAddrRecord(addr **url.URL) tlv.Record {
+	var addrBytes []byte
+	if *addr != nil {
+		addrBytes = []byte((*addr).String())
+	}
+	recordSize := tlv.SizeVarBytes(&addrBytes)
+
+	return tlv.MakeDynamicRecord(
+		addrProofCourierAddrType, addr, recordSize,
+		urlEncoder, urlDecoder,
 	)
 }
