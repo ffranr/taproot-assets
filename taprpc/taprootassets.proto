@@ -566,6 +566,9 @@ message Addr {
     transfer assets described in this address.
     */
     bytes taproot_output_key = 9;
+
+    // A proof courier address for use in proof transfer.
+    string proof_courier_addr = 10;
 }
 
 message QueryAddrRequest {
