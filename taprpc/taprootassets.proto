@@ -624,6 +624,9 @@ message NewAddrRequest {
     commitment of the asset.
     */
     bytes tapscript_sibling = 5;
+
+    // An optional proof courier address for use in proof transfer.
+    string proof_courier_addr = 6;
 }
 
 message ScriptKey {
