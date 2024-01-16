@@ -200,6 +200,15 @@ func (l *LndRpcChainBridge) EstimateFee(ctx context.Context,
 	return l.lnd.WalletKit.EstimateFeeRate(ctx, int32(confTarget))
 }
 
+// SubscribeCustomMessages creates a subscription to custom messages received
+// from our peers.
+func (l *LndRpcChainBridge) SubscribeCustomMessages(
+	ctx context.Context) (<-chan lndclient.CustomMessage,
+	<-chan error, error) {
+
+	return l.lnd.Client.SubscribeCustomMessages(ctx)
+}
+
 // A compile time assertion to ensure LndRpcChainBridge meets the
 // tapgarden.ChainBridge interface.
 var _ tapgarden.ChainBridge = (*LndRpcChainBridge)(nil)

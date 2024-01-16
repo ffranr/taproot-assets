@@ -14,6 +14,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/proof"
+	"github.com/lightninglabs/taproot-assets/rfq"
 	"github.com/lightninglabs/taproot-assets/tapdb"
 	"github.com/lightninglabs/taproot-assets/tapdb/sqlc"
 	"github.com/lightninglabs/taproot-assets/tapfreighter"
@@ -329,6 +330,15 @@ func genServerConfig(cfg *Config, cfgLogger btclog.Logger,
 
 	multiNotifier := proof.NewMultiArchiveNotifier(assetStore, multiverse)
 
+	rfqManager, err := rfq.NewManager(
+		rfq.ManagerCfg{
+			PeerMessagePorter: chainBridge,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &tap.Config{
 		DebugLevel:   cfg.DebugLevel,
 		RuntimeID:    runtimeID,
@@ -401,6 +411,7 @@ func genServerConfig(cfg *Config, cfgLogger btclog.Logger,
 		UniversePublicAccess:     cfg.Universe.PublicAccess,
 		UniverseQueriesPerSecond: cfg.Universe.UniverseQueriesPerSecond,
 		UniverseQueriesBurst:     cfg.Universe.UniverseQueriesBurst,
+		RfqManager:               &rfqManager,
 		LogWriter:                cfg.LogWriter,
 		DatabaseConfig: &tap.DatabaseConfig{
 			RootKeyStore: tapdb.NewRootKeyStore(rksDB),
