@@ -4,8 +4,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/lightninglabs/taproot-assets/fn"
+)
+
+const (
+	DefaultTimeout = 30 * time.Second
 )
 
 type ManagerCfg struct {
@@ -29,6 +34,10 @@ type Manager struct {
 func NewManager(cfg ManagerCfg) (Manager, error) {
 	return Manager{
 		cfg: cfg,
+		ContextGuard: &fn.ContextGuard{
+			DefaultTimeout: DefaultTimeout,
+			Quit:           make(chan struct{}),
+		},
 	}, nil
 }
 
@@ -94,7 +103,7 @@ func (m *Manager) initSubsystems(ctx context.Context) error {
 	go func() {
 		defer m.Wg.Done()
 
-		log.Info("Starting RFQ stream handler")
+		// Start the RFQ stream handler.
 		err = m.rfqStreamHandle.Start()
 		if err != nil {
 			return

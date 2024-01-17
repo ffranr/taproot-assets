@@ -10,6 +10,7 @@ import (
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/fn"
+	"github.com/lightningnetwork/lnd/lnwire"
 )
 
 // TapMessageTypeBaseOffset is the taproot-assets specific message type
@@ -18,12 +19,12 @@ import (
 //
 // This offset was chosen as the concatenation of the alphabetical index
 // positions of the letters "t" (20), "a" (1), and "p" (16).
-const TapMessageTypeBaseOffset uint32 = 20116
+const TapMessageTypeBaseOffset = uint32(lnwire.CustomTypeStart) + 20116
 
 var (
-	// QuoteRequestMsgType is the message type identifier for a quote
+	// MsgTypeQuoteRequest is the message type identifier for a quote
 	// request message.
-	QuoteRequestMsgType = TapMessageTypeBaseOffset + 1
+	MsgTypeQuoteRequest = TapMessageTypeBaseOffset + 1
 )
 
 // QuoteRequest is a struct that represents a request for a quote (RFQ) from a
@@ -62,8 +63,12 @@ func (q *QuoteRequest) Encode() ([]byte, error) {
 		return nil, err
 	}
 
-	groupKeyBytes := q.AssetCompressedPubGroupKey.SerializeCompressed()
-	_, err = buf.Write(groupKeyBytes)
+	var groupKeyBytes [33]byte
+	if q.AssetCompressedPubGroupKey != nil {
+		k := q.AssetCompressedPubGroupKey.SerializeCompressed()
+		copy(groupKeyBytes[:], k)
+	}
+	_, err = buf.Write(groupKeyBytes[:])
 	if err != nil {
 		return nil, err
 	}
@@ -149,11 +154,22 @@ func NewStreamHandler(ctx context.Context,
 			"custom messages via message transfer handle: %w", err)
 	}
 
+	incomingQuoteRequests := fn.NewEventReceiver[QuoteRequest](
+		fn.DefaultQueueSize,
+	)
+
 	return &StreamHandler{
 		recvRawMessages:    msgChan,
 		errRecvRawMessages: errChan,
 
+		IncomingQuoteRequests: incomingQuoteRequests,
+
 		ErrChan: make(<-chan error),
+
+		ContextGuard: &fn.ContextGuard{
+			DefaultTimeout: DefaultTimeout,
+			Quit:           make(chan struct{}),
+		},
 	}, nil
 }
 
@@ -167,7 +183,8 @@ func (h *StreamHandler) handleQuoteRequestMsg(msg lndclient.CustomMessage) error
 			err)
 	}
 
-	// TODO(ffranr): Determine whether to keep or discard the RFQ message.
+	// TODO(ffranr): Determine whether to keep or discard the RFQ message
+	//  based on the peer's ID and the asset's ID.
 
 	// Send the quote request to the RFQ manager.
 	sendSuccess := fn.SendOrQuit(
@@ -186,7 +203,7 @@ func (h *StreamHandler) handleRecvRawMessage(
 	msg lndclient.CustomMessage) error {
 
 	switch msg.MsgType {
-	case QuoteRequestMsgType:
+	case MsgTypeQuoteRequest:
 		err := h.handleQuoteRequestMsg(msg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
@@ -203,9 +220,13 @@ func (h *StreamHandler) handleRecvRawMessage(
 
 // Start starts the RFQ stream handler.
 func (h *StreamHandler) Start() error {
+	log.Info("Starting RFQ stream handler main event loop")
+
 	for {
 		select {
 		case msg := <-h.recvRawMessages:
+			log.Infof("Received raw custom message: %v", msg)
+
 			err := h.handleRecvRawMessage(msg)
 			if err != nil {
 				log.Warnf("Error handling raw custom "+
@@ -226,6 +247,8 @@ func (h *StreamHandler) Start() error {
 
 // Stop stops the RFQ stream handler.
 func (h *StreamHandler) Stop() error {
+	log.Info("Stopping RFQ stream handler")
+
 	close(h.Quit)
 	return nil
 }
