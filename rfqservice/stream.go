@@ -1,4 +1,4 @@
-package rfq
+package rfqservice
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
+	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
 
 // StreamHandler is a struct that handles incoming and outgoing peer RFQ stream
@@ -25,7 +26,7 @@ type StreamHandler struct {
 
 	// IncomingQuoteRequests is a channel which is populated with incoming
 	// (received) and processed requests for quote (RFQ) messages.
-	IncomingQuoteRequests *fn.EventReceiver[QuoteRequest]
+	IncomingQuoteRequests *fn.EventReceiver[msg.QuoteRequest]
 
 	// ErrChan is the handle's error reporting channel.
 	ErrChan <-chan error
@@ -45,7 +46,7 @@ func NewStreamHandler(ctx context.Context,
 			"custom messages via message transfer handle: %w", err)
 	}
 
-	incomingQuoteRequests := fn.NewEventReceiver[QuoteRequest](
+	incomingQuoteRequests := fn.NewEventReceiver[msg.QuoteRequest](
 		fn.DefaultQueueSize,
 	)
 
@@ -65,10 +66,12 @@ func NewStreamHandler(ctx context.Context,
 }
 
 // handleRecvRawMessage handles an incoming raw peer message.
-func (h *StreamHandler) handleQuoteRequestMsg(msg lndclient.CustomMessage) error {
+func (h *StreamHandler) handleQuoteRequestMsg(
+	rawMsg lndclient.CustomMessage) error {
+
 	// Attempt to decode the message as a request for quote (RFQ) message.
-	var quoteRequest QuoteRequest
-	err := quoteRequest.Decode(msg.Data)
+	var quoteRequest msg.QuoteRequest
+	err := quoteRequest.Decode(rawMsg.Data)
 	if err != nil {
 		return fmt.Errorf("unable to decode incoming RFQ message: %w",
 			err)
@@ -91,11 +94,11 @@ func (h *StreamHandler) handleQuoteRequestMsg(msg lndclient.CustomMessage) error
 
 // handleRecvRawMessage handles an incoming raw peer message.
 func (h *StreamHandler) handleRecvRawMessage(
-	msg lndclient.CustomMessage) error {
+	rawMsg lndclient.CustomMessage) error {
 
-	switch msg.MsgType {
-	case MsgTypeQuoteRequest:
-		err := h.handleQuoteRequestMsg(msg)
+	switch rawMsg.MsgType {
+	case msg.MsgTypeQuoteRequest:
+		err := h.handleQuoteRequestMsg(rawMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"request message: %w", err)
@@ -115,10 +118,10 @@ func (h *StreamHandler) Start() error {
 
 	for {
 		select {
-		case msg := <-h.recvRawMessages:
-			log.Infof("Received raw custom message: %v", msg)
+		case rawMsg := <-h.recvRawMessages:
+			log.Infof("Received raw custom message: %v", rawMsg)
 
-			err := h.handleRecvRawMessage(msg)
+			err := h.handleRecvRawMessage(rawMsg)
 			if err != nil {
 				log.Warnf("Error handling raw custom "+
 					"message recieve event: %v", err)

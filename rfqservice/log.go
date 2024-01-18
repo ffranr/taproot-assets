@@ -1,4 +1,4 @@
-package rfq
+package rfqservice
 
 import (
 	"github.com/btcsuite/btclog"

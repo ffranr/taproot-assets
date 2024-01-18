@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/lightninglabs/taproot-assets/asset"
-	"github.com/lightninglabs/taproot-assets/rfq"
+	"github.com/lightninglabs/taproot-assets/rfqmessages"
+	"github.com/lightninglabs/taproot-assets/rfqservice"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/stretchr/testify/require"
 )
@@ -46,13 +47,13 @@ func testQuoteRequest(t *harnessTest) {
 	_, err = rand.Read(randomAssetId[:])
 	require.NoError(t.t, err, "unable to generate random asset id")
 
-	quoteRequest := rfq.QuoteRequest{
+	quoteRequest := rfqmessages.QuoteRequest{
 		ID:                randomQuoteRequestId,
-		AssetID:           randomAssetId,
+		AssetID:           &randomAssetId,
 		AssetAmount:       42,
 		SuggestedRateTick: 10,
 	}
-	quoteReqBytes, err := quoteRequest.Encode()
+	quoteReqBytes, err := quoteRequest.EncodeNonTlv()
 	require.NoError(t.t, err, "unable to encode quote request")
 
 	go func() {
@@ -69,7 +70,7 @@ func testQuoteRequest(t *harnessTest) {
 
 	res := t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
 		Peer: t.lndHarness.Alice.PubKey[:],
-		Type: rfq.MsgTypeQuoteRequest,
+		Type: rfqservice.MsgTypeQuoteRequest,
 		Data: quoteReqBytes,
 	})
 	res = res

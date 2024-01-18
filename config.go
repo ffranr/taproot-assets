@@ -10,7 +10,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/address"
 	"github.com/lightninglabs/taproot-assets/monitoring"
 	"github.com/lightninglabs/taproot-assets/proof"
-	"github.com/lightninglabs/taproot-assets/rfq"
+	"github.com/lightninglabs/taproot-assets/rfqservice"
 	"github.com/lightninglabs/taproot-assets/tapdb"
 	"github.com/lightninglabs/taproot-assets/tapfreighter"
 	"github.com/lightninglabs/taproot-assets/tapgarden"
@@ -123,7 +123,7 @@ type Config struct {
 
 	UniverseFederation *universe.FederationEnvoy
 
-	RfqManager *rfq.Manager
+	RfqManager *rfqservice.Manager
 
 	UniverseStats universe.Telemetry
 
