@@ -46,7 +46,6 @@ func (m *Manager) Start() error {
 	var startErr error
 	m.startOnce.Do(func() {
 		ctx, cancel := m.WithCtxQuitNoTimeout()
-		defer cancel()
 
 		log.Info("Initializing RFQ subsystems")
 		err := m.initSubsystems(ctx)
@@ -58,7 +57,13 @@ func (m *Manager) Start() error {
 		// Start the manager's main event loop in a separate goroutine.
 		m.Wg.Add(1)
 		go func() {
-			defer m.Wg.Done()
+			defer func() {
+				m.Wg.Done()
+
+				// Cancel the context to stop all subsystems
+				// if the main event loop exits.
+				defer cancel()
+			}()
 
 			log.Info("Starting RFQ manager main event loop")
 			err = m.mainEventLoop()
@@ -106,11 +111,12 @@ func (m *Manager) initSubsystems(ctx context.Context) error {
 		// Start the RFQ stream handler.
 		err = m.rfqStreamHandle.Start()
 		if err != nil {
+			log.Warnf("Error starting RFQ stream handler: %v", err)
 			return
 		}
 	}()
 
-	return nil
+	return err
 }
 
 func (m *Manager) mainEventLoop() error {
@@ -127,6 +133,8 @@ func (m *Manager) mainEventLoop() error {
 				"handler: %w", errStream)
 
 		case <-m.Quit:
+			log.Debug("RFQ manager main event loop has received " +
+				"the shutdown signal")
 			return nil
 		}
 	}

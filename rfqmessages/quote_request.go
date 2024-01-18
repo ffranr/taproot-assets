@@ -27,18 +27,13 @@ func QuoteRequestIDRecord(id *[32]byte) tlv.Record {
 }
 
 func QuoteRequestAssetIDRecord(assetID *asset.ID) tlv.Record {
-	return tlv.MakePrimitiveRecord(QuoteRequestAssetIDType, assetID)
+	assetIdBytes := assetID[:]
+	return tlv.MakePrimitiveRecord(QuoteRequestAssetIDType, &assetIdBytes)
 }
 
-func QuoteRequestGroupKeyRecord(
-	assetCompressedPubGroupKey *btcec.PublicKey) tlv.Record {
-
-	// Serialize pub key to its compressed form. This allows us to handle
-	// the public key as a primitive record.
-	pubKeyBytes := assetCompressedPubGroupKey.SerializeCompressed()
-
+func QuoteRequestGroupKeyRecord(groupKey *btcec.PublicKey) tlv.Record {
 	return tlv.MakePrimitiveRecord(
-		QuoteRequestGroupKeyType, &pubKeyBytes,
+		QuoteRequestGroupKeyType, &groupKey,
 	)
 }
 

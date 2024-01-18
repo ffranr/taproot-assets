@@ -60,24 +60,39 @@ func testQuoteRequest(t *harnessTest) {
 	require.NoError(t.t, err, "unable to encode quote request")
 	quoteReqBytes := streamBuf.Bytes()
 
-	go func() {
-		msgClient, cancel := t.lndHarness.Alice.RPC.SubscribeCustomMessages()
-		defer cancel()
+	//go func() {
+	//	msgClient, cancel := t.lndHarness.Alice.RPC.SubscribeCustomMessages()
+	//	defer cancel()
+	//
+	//	for {
+	//		msg, err := msgClient.Recv()
+	//		require.NoError(
+	//			t.t, err, "custom message receive: %w", err,
+	//		)
+	//
+	//		t.Logf("Received custom message: %v", msg)
+	//	}
+	//}()
 
-		for {
-			msg, err := msgClient.Recv()
-			require.NoError(t.t, err, "unable to receive custom message")
+	resAlice := t.lndHarness.Alice.RPC.GetInfo()
+	t.Logf("Alice alias: %s", resAlice.Alias)
 
-			t.Logf("Received custom message: %v", msg)
-		}
-	}()
+	resBob := t.lndHarness.Bob.RPC.GetInfo()
+	t.Logf("Bob alias: %s", resBob.Alias)
 
-	res := t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
+	t.Logf("Sending custom message to alias: %s", resAlice.Alias)
+	t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
 		Peer: t.lndHarness.Alice.PubKey[:],
 		Type: rfqmessages.MsgTypeQuoteRequest,
 		Data: quoteReqBytes,
 	})
-	res = res
+
+	//t.Logf("Sending custom message to alias: %s", resBob.Alias)
+	//t.lndHarness.Alice.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
+	//	Peer: t.lndHarness.Bob.PubKey[:],
+	//	Type: rfqmessages.MsgTypeQuoteRequest,
+	//	Data: quoteReqBytes,
+	//})
 
 	time.Sleep(20 * time.Second)
 }

@@ -41,10 +41,15 @@ type StreamHandler struct {
 func NewStreamHandler(ctx context.Context,
 	peerMessagePorter PeerMessagePorter) (*StreamHandler, error) {
 
+	res, err := peerMessagePorter.GetInfo(ctx)
+	res = res
+
+	log.Infof("Peer message porter info: %v", res)
+
 	msgChan, errChan, err := peerMessagePorter.SubscribeCustomMessages(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe to "+
-			"custom messages via message transfer handle: %w", err)
+		return nil, fmt.Errorf("failed to subscribe to custom "+
+			"messages via message transfer handle: %w", err)
 	}
 
 	incomingQuoteRequests := fn.NewEventReceiver[msg.QuoteRequest](
@@ -115,13 +120,17 @@ func (h *StreamHandler) handleRecvRawMessage(
 
 // Start starts the RFQ stream handler.
 func (h *StreamHandler) Start() error {
-	log.Info("Starting RFQ stream handler main event loop")
+	log.Info("Starting RFQ subsystem: peer message stream handler")
 
 	for {
 		select {
-		case rawMsg := <-h.recvRawMessages:
-			log.Infof("Received raw custom message: %v", rawMsg)
+		case rawMsg, ok := <-h.recvRawMessages:
+			if !ok {
+				return fmt.Errorf("raw custom messages " +
+					"channel closed unexpectedly")
+			}
 
+			log.Infof("Received raw custom message: %v", rawMsg)
 			err := h.handleRecvRawMessage(rawMsg)
 			if err != nil {
 				log.Warnf("Error handling raw custom "+
@@ -136,13 +145,16 @@ func (h *StreamHandler) Start() error {
 
 		case <-h.Quit:
 			return nil
+
+			//default:
+			//	log.Info("No events to handle, waiting for new events")
 		}
 	}
 }
 
 // Stop stops the RFQ stream handler.
 func (h *StreamHandler) Stop() error {
-	log.Info("Stopping RFQ stream handler")
+	log.Info("Stopping RFQ subsystem: stream handler")
 
 	close(h.Quit)
 	return nil
@@ -151,6 +163,8 @@ func (h *StreamHandler) Stop() error {
 // PeerMessagePorter is an interface that abstracts the peer message transport
 // layer.
 type PeerMessagePorter interface {
+	GetInfo(ctx context.Context) (*lndclient.Info, error)
+
 	SubscribeCustomMessages(
 		ctx context.Context) (<-chan lndclient.CustomMessage,
 		<-chan error, error)

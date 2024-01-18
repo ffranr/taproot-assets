@@ -209,6 +209,12 @@ func (l *LndRpcChainBridge) SubscribeCustomMessages(
 	return l.lnd.Client.SubscribeCustomMessages(ctx)
 }
 
+func (l *LndRpcChainBridge) GetInfo(
+	ctx context.Context) (*lndclient.Info, error) {
+
+	return l.lnd.Client.GetInfo(ctx)
+}
+
 // A compile time assertion to ensure LndRpcChainBridge meets the
 // tapgarden.ChainBridge interface.
 var _ tapgarden.ChainBridge = (*LndRpcChainBridge)(nil)
