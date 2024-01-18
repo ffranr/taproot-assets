@@ -1,6 +1,7 @@
 package rfqservice
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -71,7 +72,7 @@ func (h *StreamHandler) handleQuoteRequestMsg(
 
 	// Attempt to decode the message as a request for quote (RFQ) message.
 	var quoteRequest msg.QuoteRequest
-	err := quoteRequest.Decode(rawMsg.Data)
+	err := quoteRequest.Decode(bytes.NewBuffer(rawMsg.Data))
 	if err != nil {
 		return fmt.Errorf("unable to decode incoming RFQ message: %w",
 			err)

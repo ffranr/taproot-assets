@@ -121,6 +121,26 @@ func (q *QuoteRequest) Encode(writer io.Writer) error {
 	return stream.Encode(writer)
 }
 
+// DecodeRecords provides all TLV records for decoding.
+func (q *QuoteRequest) DecodeRecords() []tlv.Record {
+	return []tlv.Record{
+		QuoteRequestIDRecord(&q.ID),
+		QuoteRequestAssetIDRecord(q.AssetID),
+		QuoteRequestGroupKeyRecord(q.AssetGroupKey),
+		QuoteRequestAssetAmountRecord(&q.AssetAmount),
+		QuoteRequestAmtCharacteristicRecord(&q.SuggestedRateTick),
+	}
+}
+
+// Decode decodes the structure from a TLV stream.
+func (q *QuoteRequest) Decode(r io.Reader) error {
+	stream, err := tlv.NewStream(q.DecodeRecords()...)
+	if err != nil {
+		return err
+	}
+	return stream.Decode(r)
+}
+
 // EncodeNonTlv serializes the QuoteRequest struct into a byte slice.
 func (q *QuoteRequest) EncodeNonTlv() ([]byte, error) {
 	buf := new(bytes.Buffer)
@@ -158,8 +178,8 @@ func (q *QuoteRequest) EncodeNonTlv() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Decode populates a QuoteRequest instance from a byte slice
-func (q *QuoteRequest) Decode(data []byte) error {
+// DecodeNonTlv populates a QuoteRequest instance from a byte slice
+func (q *QuoteRequest) DecodeNonTlv(data []byte) error {
 	if len(data) != 113 {
 		return fmt.Errorf("invalid data length")
 	}

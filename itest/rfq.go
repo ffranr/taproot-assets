@@ -1,12 +1,12 @@
 package itest
 
 import (
+	"bytes"
 	"math/rand"
 	"time"
 
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/rfqmessages"
-	"github.com/lightninglabs/taproot-assets/rfqservice"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/stretchr/testify/require"
 )
@@ -53,8 +53,12 @@ func testQuoteRequest(t *harnessTest) {
 		AssetAmount:       42,
 		SuggestedRateTick: 10,
 	}
-	quoteReqBytes, err := quoteRequest.EncodeNonTlv()
+
+	// TLV encode the quote request.
+	var streamBuf bytes.Buffer
+	err = quoteRequest.Encode(&streamBuf)
 	require.NoError(t.t, err, "unable to encode quote request")
+	quoteReqBytes := streamBuf.Bytes()
 
 	go func() {
 		msgClient, cancel := t.lndHarness.Alice.RPC.SubscribeCustomMessages()
@@ -70,7 +74,7 @@ func testQuoteRequest(t *harnessTest) {
 
 	res := t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
 		Peer: t.lndHarness.Alice.PubKey[:],
-		Type: rfqservice.MsgTypeQuoteRequest,
+		Type: rfqmessages.MsgTypeQuoteRequest,
 		Data: quoteReqBytes,
 	})
 	res = res
