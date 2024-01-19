@@ -2,6 +2,7 @@ package rfqmessages
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"io"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -116,6 +117,20 @@ type QuoteRequest struct {
 
 	// TODO(ffranr): rename to AmtCharacteristic?
 	SuggestedRateTick uint64
+}
+
+// Validate ensures that the quote request is valid.
+func (q *QuoteRequest) Validate() error {
+	if q.AssetID == nil && q.AssetGroupKey == nil {
+		return fmt.Errorf("asset id and group key cannot both be nil")
+	}
+
+	if q.AssetID != nil && q.AssetGroupKey != nil {
+		return fmt.Errorf("asset id and group key cannot both be " +
+			"non-nil")
+	}
+
+	return nil
 }
 
 // EncodeRecords determines the non-nil records to include when encoding an

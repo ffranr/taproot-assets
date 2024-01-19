@@ -71,8 +71,8 @@ func NewStreamHandler(ctx context.Context,
 	}, nil
 }
 
-// handleRecvRawMessage handles an incoming raw peer message.
-func (h *StreamHandler) handleQuoteRequestMsg(
+// handleIncomingRawMessage handles an incoming raw peer message.
+func (h *StreamHandler) handleIncomingQuoteRequestMsg(
 	rawMsg lndclient.CustomMessage) error {
 
 	// Attempt to decode the message as a request for quote (RFQ) message.
@@ -80,6 +80,12 @@ func (h *StreamHandler) handleQuoteRequestMsg(
 	err := quoteRequest.Decode(bytes.NewBuffer(rawMsg.Data))
 	if err != nil {
 		return fmt.Errorf("unable to decode incoming RFQ message: %w",
+			err)
+	}
+
+	// Validate incoming quote request.
+	if err = quoteRequest.Validate(); err != nil {
+		return fmt.Errorf("unable to validate incoming RFQ message: %w",
 			err)
 	}
 
@@ -98,13 +104,13 @@ func (h *StreamHandler) handleQuoteRequestMsg(
 	return nil
 }
 
-// handleRecvRawMessage handles an incoming raw peer message.
-func (h *StreamHandler) handleRecvRawMessage(
+// handleIncomingRawMessage handles an incoming raw peer message.
+func (h *StreamHandler) handleIncomingRawMessage(
 	rawMsg lndclient.CustomMessage) error {
 
 	switch rawMsg.MsgType {
 	case msg.MsgTypeQuoteRequest:
-		err := h.handleQuoteRequestMsg(rawMsg)
+		err := h.handleIncomingQuoteRequestMsg(rawMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"request message: %w", err)
@@ -130,8 +136,9 @@ func (h *StreamHandler) Start() error {
 					"channel closed unexpectedly")
 			}
 
-			log.Infof("Received raw custom message: %v", rawMsg)
-			err := h.handleRecvRawMessage(rawMsg)
+			log.Infof("Handling incoming raw custom message: %v",
+				rawMsg)
+			err := h.handleIncomingRawMessage(rawMsg)
 			if err != nil {
 				log.Warnf("Error handling raw custom "+
 					"message recieve event: %v", err)
@@ -145,9 +152,6 @@ func (h *StreamHandler) Start() error {
 
 		case <-h.Quit:
 			return nil
-
-			//default:
-			//	log.Info("No events to handle, waiting for new events")
 		}
 	}
 }
