@@ -1,9 +1,7 @@
 package rfqmessages
 
 import (
-	"bytes"
-	"encoding/binary"
-	"fmt"
+	"crypto/sha256"
 	"io"
 
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -26,14 +24,51 @@ func QuoteRequestIDRecord(id *[32]byte) tlv.Record {
 	return tlv.MakePrimitiveRecord(QuoteRequestIDType, id)
 }
 
-func QuoteRequestAssetIDRecord(assetID *asset.ID) tlv.Record {
-	assetIdBytes := assetID[:]
-	return tlv.MakePrimitiveRecord(QuoteRequestAssetIDType, &assetIdBytes)
+func QuoteRequestAssetIDRecord(assetID **asset.ID) tlv.Record {
+	const recordSize = sha256.Size
+
+	return tlv.MakeStaticRecord(
+		QuoteRequestAssetIDType, assetID, recordSize,
+		IDEncoder, IDDecoder,
+	)
 }
 
-func QuoteRequestGroupKeyRecord(groupKey *btcec.PublicKey) tlv.Record {
-	return tlv.MakePrimitiveRecord(
-		QuoteRequestGroupKeyType, &groupKey,
+func IDEncoder(w io.Writer, val any, buf *[8]byte) error {
+	if t, ok := val.(**asset.ID); ok {
+		id := [sha256.Size]byte(**t)
+		return tlv.EBytes32(w, &id, buf)
+	}
+
+	return tlv.NewTypeForEncodingErr(val, "AssetID")
+}
+
+func IDDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
+	const assetIDBytesLen = sha256.Size
+
+	if typ, ok := val.(**asset.ID); ok {
+		var idBytes [assetIDBytesLen]byte
+
+		err := tlv.DBytes32(r, &idBytes, buf, assetIDBytesLen)
+		if err != nil {
+			return err
+		}
+
+		id := asset.ID(idBytes)
+		assetId := &id
+
+		*typ = assetId
+		return nil
+	}
+
+	return tlv.NewTypeForDecodingErr(val, "AssetID", l, sha256.Size)
+}
+
+func QuoteRequestGroupKeyRecord(groupKey **btcec.PublicKey) tlv.Record {
+	const recordSize = btcec.PubKeyBytesLenCompressed
+
+	return tlv.MakeStaticRecord(
+		QuoteRequestGroupKeyType, groupKey, recordSize,
+		asset.CompressedPubKeyEncoder, asset.CompressedPubKeyDecoder,
 	)
 }
 
@@ -91,11 +126,11 @@ func (q *QuoteRequest) EncodeRecords() []tlv.Record {
 	records = append(records, QuoteRequestIDRecord(&q.ID))
 
 	if q.AssetID != nil {
-		records = append(records, QuoteRequestAssetIDRecord(q.AssetID))
+		records = append(records, QuoteRequestAssetIDRecord(&q.AssetID))
 	}
 
 	if q.AssetGroupKey != nil {
-		record := QuoteRequestGroupKeyRecord(q.AssetGroupKey)
+		record := QuoteRequestGroupKeyRecord(&q.AssetGroupKey)
 		records = append(records, record)
 	}
 
@@ -120,8 +155,8 @@ func (q *QuoteRequest) Encode(writer io.Writer) error {
 func (q *QuoteRequest) DecodeRecords() []tlv.Record {
 	return []tlv.Record{
 		QuoteRequestIDRecord(&q.ID),
-		QuoteRequestAssetIDRecord(q.AssetID),
-		QuoteRequestGroupKeyRecord(q.AssetGroupKey),
+		QuoteRequestAssetIDRecord(&q.AssetID),
+		QuoteRequestGroupKeyRecord(&q.AssetGroupKey),
 		QuoteRequestAssetAmountRecord(&q.AssetAmount),
 		QuoteRequestAmtCharacteristicRecord(&q.SuggestedRateTick),
 	}
@@ -134,72 +169,4 @@ func (q *QuoteRequest) Decode(r io.Reader) error {
 		return err
 	}
 	return stream.Decode(r)
-}
-
-// EncodeNonTlv serializes the QuoteRequest struct into a byte slice.
-func (q *QuoteRequest) EncodeNonTlv() ([]byte, error) {
-	buf := new(bytes.Buffer)
-
-	_, err := buf.Write(q.ID[:])
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = buf.Write(q.AssetID[:])
-	if err != nil {
-		return nil, err
-	}
-
-	var groupKeyBytes [33]byte
-	if q.AssetGroupKey != nil {
-		k := q.AssetGroupKey.SerializeCompressed()
-		copy(groupKeyBytes[:], k)
-	}
-	_, err = buf.Write(groupKeyBytes[:])
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(buf, binary.BigEndian, q.AssetAmount)
-	if err != nil {
-		return nil, err
-	}
-
-	err = binary.Write(buf, binary.BigEndian, q.SuggestedRateTick)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
-}
-
-// DecodeNonTlv populates a QuoteRequest instance from a byte slice
-func (q *QuoteRequest) DecodeNonTlv(data []byte) error {
-	if len(data) != 113 {
-		return fmt.Errorf("invalid data length")
-	}
-
-	var err error
-
-	// Parse the request's ID.
-	copy(q.ID[:], data[:32])
-
-	// Parse the asset's ID.
-	copy(q.AssetID[:], data[32:64])
-
-	// Parse the asset's compressed public group key.
-	var compressedPubGroupKeyBytes []byte
-	copy(compressedPubGroupKeyBytes[:], data[64:97])
-	q.AssetGroupKey, err = btcec.ParsePubKey(
-		compressedPubGroupKeyBytes,
-	)
-	if err != nil {
-		return fmt.Errorf("unable to parse compressed public group "+
-			"key: %w", err)
-	}
-
-	q.AssetAmount = binary.BigEndian.Uint64(data[97:105])
-	q.SuggestedRateTick = binary.BigEndian.Uint64(data[105:])
-
-	return nil
 }
