@@ -7,7 +7,6 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
-	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/tlv"
 )
 
@@ -82,20 +81,6 @@ func QuoteRequestAmtCharacteristicRecord(amtCharacteristic *uint64) tlv.Record {
 		QuoteRequestAmtCharacteristicType, amtCharacteristic,
 	)
 }
-
-// TapMessageTypeBaseOffset is the taproot-assets specific message type
-// identifier base offset. All tap messages will have a type identifier that is
-// greater than this value.
-//
-// This offset was chosen as the concatenation of the alphabetical index
-// positions of the letters "t" (20), "a" (1), and "p" (16).
-const TapMessageTypeBaseOffset = 20116 + uint32(lnwire.CustomTypeStart)
-
-var (
-	// MsgTypeQuoteRequest is the message type identifier for a quote
-	// request message.
-	MsgTypeQuoteRequest = TapMessageTypeBaseOffset + 1
-)
 
 // QuoteRequest is a struct that represents a request for a quote (RFQ) from a
 // peer.

@@ -209,10 +209,11 @@ func (l *LndRpcChainBridge) SubscribeCustomMessages(
 	return l.lnd.Client.SubscribeCustomMessages(ctx)
 }
 
-func (l *LndRpcChainBridge) GetInfo(
-	ctx context.Context) (*lndclient.Info, error) {
+// SendCustomMessage sends a custom message to a peer.
+func (l *LndRpcChainBridge) SendCustomMessage(ctx context.Context,
+	msg lndclient.CustomMessage) error {
 
-	return l.lnd.Client.GetInfo(ctx)
+	return l.lnd.Client.SendCustomMessage(ctx, msg)
 }
 
 // A compile time assertion to ensure LndRpcChainBridge meets the

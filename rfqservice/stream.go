@@ -17,6 +17,10 @@ import (
 // processes those messages with the aim of extracting relevant request for
 // quotes (RFQs).
 type StreamHandler struct {
+	// peerMessagePorter is the peer message porter. This component is used
+	// to send and receive raw peer messages.
+	peerMessagePorter PeerMessagePorter
+
 	// recvRawMessages is a channel that receives incoming raw peer
 	// messages.
 	recvRawMessages <-chan lndclient.CustomMessage
@@ -37,14 +41,9 @@ type StreamHandler struct {
 	*fn.ContextGuard
 }
 
-// NewStreamHandler creates a new RFQ stream handler.
+// NewStreamHandler creates and starts a new RFQ stream handler.
 func NewStreamHandler(ctx context.Context,
 	peerMessagePorter PeerMessagePorter) (*StreamHandler, error) {
-
-	res, err := peerMessagePorter.GetInfo(ctx)
-	res = res
-
-	log.Infof("Peer message porter info: %v", res)
 
 	msgChan, errChan, err := peerMessagePorter.SubscribeCustomMessages(ctx)
 	if err != nil {
@@ -56,7 +55,9 @@ func NewStreamHandler(ctx context.Context,
 		fn.DefaultQueueSize,
 	)
 
-	return &StreamHandler{
+	streamHandler := StreamHandler{
+		peerMessagePorter: peerMessagePorter,
+
 		recvRawMessages:    msgChan,
 		errRecvRawMessages: errChan,
 
@@ -68,11 +69,19 @@ func NewStreamHandler(ctx context.Context,
 			DefaultTimeout: DefaultTimeout,
 			Quit:           make(chan struct{}),
 		},
-	}, nil
+	}
+
+	err = streamHandler.Start()
+	if err != nil {
+		return nil, fmt.Errorf("unable to start RFQ stream handler: %w",
+			err)
+	}
+
+	return &streamHandler, nil
 }
 
 // handleIncomingRawMessage handles an incoming raw peer message.
-func (h *StreamHandler) handleIncomingQuoteRequestMsg(
+func (h *StreamHandler) handleIncomingQuoteRequest(
 	rawMsg lndclient.CustomMessage) error {
 
 	// Attempt to decode the message as a request for quote (RFQ) message.
@@ -110,21 +119,56 @@ func (h *StreamHandler) handleIncomingRawMessage(
 
 	switch rawMsg.MsgType {
 	case msg.MsgTypeQuoteRequest:
-		err := h.handleIncomingQuoteRequestMsg(rawMsg)
+		err := h.handleIncomingQuoteRequest(rawMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"request message: %w", err)
 		}
 
+	case msg.MsgTypeQuoteAccept:
+		// TODO(ffranr): handle incoming quote accept message.
+
 	default:
-		// Silently disregard irrelevant messages based on message type.
+		// Silently disregard any irrelevant message if we don't
+		// recognise the message type.
 		return nil
 	}
 
 	return nil
 }
 
-// Start starts the RFQ stream handler.
+// HandleOutgoingQuoteAccept handles an outgoing quote accept message.
+func (h *StreamHandler) HandleOutgoingQuoteAccept(
+	quoteAccept msg.QuoteAccept) error {
+
+	var buff *bytes.Buffer
+	err := quoteAccept.Encode(buff)
+	if err != nil {
+		return fmt.Errorf("unable to encode quote accept message: %w",
+			err)
+	}
+
+	quoteAcceptBytes := buff.Bytes()
+
+	ctx, cancel := h.WithCtxQuitNoTimeout()
+	defer cancel()
+
+	outgoingMsg := lndclient.CustomMessage{
+		Peer:    quoteAccept.Peer,
+		MsgType: msg.MsgTypeQuoteAccept,
+		Data:    quoteAcceptBytes,
+	}
+
+	err = h.peerMessagePorter.SendCustomMessage(ctx, outgoingMsg)
+	if err != nil {
+		return fmt.Errorf("unable to send quote accept message: %w",
+			err)
+	}
+
+	return nil
+}
+
+// Start starts the handler.
 func (h *StreamHandler) Start() error {
 	log.Info("Starting RFQ subsystem: peer message stream handler")
 
@@ -136,8 +180,6 @@ func (h *StreamHandler) Start() error {
 					"channel closed unexpectedly")
 			}
 
-			log.Infof("Handling incoming raw custom message: %v",
-				rawMsg)
 			err := h.handleIncomingRawMessage(rawMsg)
 			if err != nil {
 				log.Warnf("Error handling raw custom "+
@@ -156,7 +198,7 @@ func (h *StreamHandler) Start() error {
 	}
 }
 
-// Stop stops the RFQ stream handler.
+// Stop stops the handler.
 func (h *StreamHandler) Stop() error {
 	log.Info("Stopping RFQ subsystem: stream handler")
 
@@ -167,9 +209,12 @@ func (h *StreamHandler) Stop() error {
 // PeerMessagePorter is an interface that abstracts the peer message transport
 // layer.
 type PeerMessagePorter interface {
-	GetInfo(ctx context.Context) (*lndclient.Info, error)
-
+	// SubscribeCustomMessages creates a subscription to custom messages
+	// received from our peers.
 	SubscribeCustomMessages(
 		ctx context.Context) (<-chan lndclient.CustomMessage,
 		<-chan error, error)
+
+	// SendCustomMessage sends a custom message to a peer.
+	SendCustomMessage(context.Context, lndclient.CustomMessage) error
 }
