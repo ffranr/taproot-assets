@@ -1,6 +1,11 @@
 package rfqmessages
 
-import "github.com/lightningnetwork/lnd/lnwire"
+import (
+	"github.com/lightningnetwork/lnd/lnwire"
+)
+
+// ID is the identifier for a RFQ message.
+type ID [32]byte
 
 // TapMessageTypeBaseOffset is the taproot-assets specific message type
 // identifier base offset. All tap messages will have a type identifier that is

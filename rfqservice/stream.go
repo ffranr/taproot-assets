@@ -1,7 +1,6 @@
 package rfqservice
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -84,18 +83,10 @@ func NewStreamHandler(ctx context.Context,
 func (h *StreamHandler) handleIncomingQuoteRequest(
 	rawMsg lndclient.CustomMessage) error {
 
-	// Attempt to decode the message as a request for quote (RFQ) message.
-	var quoteRequest msg.QuoteRequest
-	err := quoteRequest.Decode(bytes.NewBuffer(rawMsg.Data))
+	quoteRequest, err := msg.NewQuoteRequestFromCustomMsg(rawMsg)
 	if err != nil {
-		return fmt.Errorf("unable to decode incoming RFQ message: %w",
-			err)
-	}
-
-	// Validate incoming quote request.
-	if err = quoteRequest.Validate(); err != nil {
-		return fmt.Errorf("unable to validate incoming RFQ message: %w",
-			err)
+		return fmt.Errorf("unable to create new quote request "+
+			"message: %w", err)
 	}
 
 	// TODO(ffranr): Determine whether to keep or discard the RFQ message
@@ -103,7 +94,7 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 
 	// Send the quote request to the RFQ manager.
 	sendSuccess := fn.SendOrQuit(
-		h.IncomingQuoteRequests.NewItemCreated.ChanIn(), quoteRequest,
+		h.IncomingQuoteRequests.NewItemCreated.ChanIn(), *quoteRequest,
 		h.Quit,
 	)
 	if !sendSuccess {
@@ -141,25 +132,17 @@ func (h *StreamHandler) handleIncomingRawMessage(
 func (h *StreamHandler) HandleOutgoingQuoteAccept(
 	quoteAccept msg.QuoteAccept) error {
 
-	var buff *bytes.Buffer
-	err := quoteAccept.Encode(buff)
+	outgoingMsg, err := quoteAccept.LndCustomMsg()
 	if err != nil {
-		return fmt.Errorf("unable to encode quote accept message: %w",
-			err)
+		return fmt.Errorf("unable to create outgoing quote accept "+
+			"message: %w", err)
 	}
 
-	quoteAcceptBytes := buff.Bytes()
-
+	// Send the quote accept message to the peer.
 	ctx, cancel := h.WithCtxQuitNoTimeout()
 	defer cancel()
 
-	outgoingMsg := lndclient.CustomMessage{
-		Peer:    quoteAccept.Peer,
-		MsgType: msg.MsgTypeQuoteAccept,
-		Data:    quoteAcceptBytes,
-	}
-
-	err = h.peerMessagePorter.SendCustomMessage(ctx, outgoingMsg)
+	err = h.peerMessagePorter.SendCustomMessage(ctx, *outgoingMsg)
 	if err != nil {
 		return fmt.Errorf("unable to send quote accept message: %w",
 			err)

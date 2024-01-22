@@ -1,12 +1,11 @@
 package itest
 
 import (
-	"bytes"
 	"math/rand"
 	"time"
 
 	"github.com/lightninglabs/taproot-assets/internal/test"
-	"github.com/lightninglabs/taproot-assets/rfqmessages"
+	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/stretchr/testify/require"
 )
@@ -28,26 +27,21 @@ func testQuoteRequest(t *harnessTest) {
 	// Generate a random asset group key.
 	randomGroupPrivateKey := test.RandPrivKey(t.t)
 
-	quoteRequest := rfqmessages.QuoteRequest{
-		ID: randomQuoteRequestId,
-		//AssetID:           &randomAssetId,
-		AssetGroupKey:     randomGroupPrivateKey.PubKey(),
-		AssetAmount:       42,
-		SuggestedRateTick: 10,
-	}
+	quoteRequestMsgData, err := rfqmsg.NewQuoteRequestMsgData(
+		randomQuoteRequestId, nil, randomGroupPrivateKey.PubKey(), 42,
+		10,
+	)
 
 	// TLV encode the quote request.
-	var streamBuf bytes.Buffer
-	err = quoteRequest.Encode(&streamBuf)
+	quoteReqBytes, err := quoteRequestMsgData.Bytes()
 	require.NoError(t.t, err, "unable to encode quote request")
-	quoteReqBytes := streamBuf.Bytes()
 
 	resAlice := t.lndHarness.Alice.RPC.GetInfo()
 	t.Logf("Sending custom message to alias: %s", resAlice.Alias)
 
 	t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
 		Peer: t.lndHarness.Alice.PubKey[:],
-		Type: rfqmessages.MsgTypeQuoteRequest,
+		Type: rfqmsg.MsgTypeQuoteRequest,
 		Data: quoteReqBytes,
 	})
 

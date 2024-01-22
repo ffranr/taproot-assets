@@ -10,7 +10,7 @@ import (
 // accepted or rejected.
 type QuoteNegotiator struct {
 	// AcceptedQuotes is a channel which is populated with accepted quotes.
-	AcceptedQuotes *fn.EventReceiver[msg.QuoteRequest]
+	AcceptedQuotes *fn.EventReceiver[msg.QuoteAccept]
 
 	// incomingQuoteRequests is a channel which is populated with
 	// unprocessed incoming (received) quote request messages.
@@ -26,7 +26,7 @@ type QuoteNegotiator struct {
 
 // NewQuoteNegotiator creates a new RFQ quote negotiator.
 func NewQuoteNegotiator() (*QuoteNegotiator, error) {
-	acceptedQuotes := fn.NewEventReceiver[msg.QuoteRequest](
+	acceptedQuotes := fn.NewEventReceiver[msg.QuoteAccept](
 		fn.DefaultQueueSize,
 	)
 

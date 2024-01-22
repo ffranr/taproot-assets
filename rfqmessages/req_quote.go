@@ -1,34 +1,38 @@
 package rfqmessages
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"io"
 
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/asset"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/tlv"
 )
 
 const (
-	// QuoteRequest field TLV types.
+	// QuoteRequestMsgData field TLV types.
 
-	QuoteRequestIDType                tlv.Type = 0
-	QuoteRequestAssetIDType           tlv.Type = 1
-	QuoteRequestGroupKeyType          tlv.Type = 3
-	QuoteRequestAssetAmountType       tlv.Type = 4
-	QuoteRequestAmtCharacteristicType tlv.Type = 6
+	QuoteRequestMsgDataIDType                tlv.Type = 0
+	QuoteRequestMsgDataAssetIDType           tlv.Type = 1
+	QuoteRequestMsgDataGroupKeyType          tlv.Type = 3
+	QuoteRequestMsgDataAssetAmountType       tlv.Type = 4
+	QuoteRequestMsgDataAmtCharacteristicType tlv.Type = 6
 )
 
-func QuoteRequestIDRecord(id *[32]byte) tlv.Record {
-	return tlv.MakePrimitiveRecord(QuoteRequestIDType, id)
+func QuoteRequestMsgDataIDRecord(id *ID) tlv.Record {
+	idBytes := (*[32]byte)(id)
+	return tlv.MakePrimitiveRecord(QuoteRequestMsgDataIDType, idBytes)
 }
 
-func QuoteRequestAssetIDRecord(assetID **asset.ID) tlv.Record {
+func QuoteRequestMsgDataAssetIDRecord(assetID **asset.ID) tlv.Record {
 	const recordSize = sha256.Size
 
 	return tlv.MakeStaticRecord(
-		QuoteRequestAssetIDType, assetID, recordSize,
+		QuoteRequestMsgDataAssetIDType, assetID, recordSize,
 		IDEncoder, IDDecoder,
 	)
 }
@@ -63,30 +67,30 @@ func IDDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
 	return tlv.NewTypeForDecodingErr(val, "AssetID", l, sha256.Size)
 }
 
-func QuoteRequestGroupKeyRecord(groupKey **btcec.PublicKey) tlv.Record {
+func QuoteRequestMsgDataGroupKeyRecord(groupKey **btcec.PublicKey) tlv.Record {
 	const recordSize = btcec.PubKeyBytesLenCompressed
 
 	return tlv.MakeStaticRecord(
-		QuoteRequestGroupKeyType, groupKey, recordSize,
+		QuoteRequestMsgDataGroupKeyType, groupKey, recordSize,
 		asset.CompressedPubKeyEncoder, asset.CompressedPubKeyDecoder,
 	)
 }
 
-func QuoteRequestAssetAmountRecord(assetAmount *uint64) tlv.Record {
-	return tlv.MakePrimitiveRecord(QuoteRequestAssetAmountType, assetAmount)
+func QuoteRequestMsgDataAssetAmountRecord(assetAmount *uint64) tlv.Record {
+	return tlv.MakePrimitiveRecord(QuoteRequestMsgDataAssetAmountType, assetAmount)
 }
 
-func QuoteRequestAmtCharacteristicRecord(amtCharacteristic *uint64) tlv.Record {
+func QuoteRequestMsgDataAmtCharacteristicRecord(amtCharacteristic *uint64) tlv.Record {
 	return tlv.MakePrimitiveRecord(
-		QuoteRequestAmtCharacteristicType, amtCharacteristic,
+		QuoteRequestMsgDataAmtCharacteristicType, amtCharacteristic,
 	)
 }
 
-// QuoteRequest is a struct that represents a request for a quote (RFQ) from a
-// peer.
-type QuoteRequest struct {
+// QuoteRequestMsgData is a struct that represents the message data from a
+// custom message request for a quote (RFQ).
+type QuoteRequestMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
-	ID [32]byte
+	ID ID
 
 	// // AssetID represents the identifier of the asset for which the peer
 	// is requesting a quote.
@@ -100,12 +104,55 @@ type QuoteRequest struct {
 	// requesting a quote.
 	AssetAmount uint64
 
-	// TODO(ffranr): rename to AmtCharacteristic?
-	SuggestedRateTick uint64
+	// AmtCharacteristic is the characteristic of the asset amount that
+	// determines the conversion rate.
+	AmtCharacteristic uint64
+}
+
+func NewQuoteRequestMsgDataFromBytes(
+	data []byte) (*QuoteRequestMsgData, error) {
+
+	var msgData QuoteRequestMsgData
+	err := msgData.Decode(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode incoming quote "+
+			"request message data: %w", err)
+	}
+
+	err = msgData.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("unable to validate quote request "+
+			"message data: %w", err)
+	}
+
+	return &msgData, nil
+}
+
+func NewQuoteRequestMsgData(id ID, assetID *asset.ID,
+	assetGroupKey *btcec.PublicKey, assetAmount uint64,
+	amtCharacteristic uint64) (*QuoteRequestMsgData, error) {
+
+	if assetID == nil && assetGroupKey == nil {
+		return nil, fmt.Errorf("asset id and group key cannot both " +
+			"be nil")
+	}
+
+	if assetID != nil && assetGroupKey != nil {
+		return nil, fmt.Errorf("asset id and group key cannot both " +
+			"be non-nil")
+	}
+
+	return &QuoteRequestMsgData{
+		ID:                id,
+		AssetID:           assetID,
+		AssetGroupKey:     assetGroupKey,
+		AssetAmount:       assetAmount,
+		AmtCharacteristic: amtCharacteristic,
+	}, nil
 }
 
 // Validate ensures that the quote request is valid.
-func (q *QuoteRequest) Validate() error {
+func (q *QuoteRequestMsgData) Validate() error {
 	if q.AssetID == nil && q.AssetGroupKey == nil {
 		return fmt.Errorf("asset id and group key cannot both be nil")
 	}
@@ -120,53 +167,104 @@ func (q *QuoteRequest) Validate() error {
 
 // EncodeRecords determines the non-nil records to include when encoding an
 // asset witness at runtime.
-func (q *QuoteRequest) EncodeRecords() []tlv.Record {
+func (q *QuoteRequestMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
-	records = append(records, QuoteRequestIDRecord(&q.ID))
+	records = append(records, QuoteRequestMsgDataIDRecord(&q.ID))
 
 	if q.AssetID != nil {
-		records = append(records, QuoteRequestAssetIDRecord(&q.AssetID))
+		records = append(records, QuoteRequestMsgDataAssetIDRecord(&q.AssetID))
 	}
 
 	if q.AssetGroupKey != nil {
-		record := QuoteRequestGroupKeyRecord(&q.AssetGroupKey)
+		record := QuoteRequestMsgDataGroupKeyRecord(&q.AssetGroupKey)
 		records = append(records, record)
 	}
 
-	records = append(records, QuoteRequestAssetAmountRecord(&q.AssetAmount))
+	records = append(records, QuoteRequestMsgDataAssetAmountRecord(&q.AssetAmount))
 
-	record := QuoteRequestAmtCharacteristicRecord(&q.SuggestedRateTick)
+	record := QuoteRequestMsgDataAmtCharacteristicRecord(&q.AmtCharacteristic)
 	records = append(records, record)
 
 	return records
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *QuoteRequest) Encode(writer io.Writer) error {
-	stream, err := tlv.NewStream(q.EncodeRecords()...)
+func (q *QuoteRequestMsgData) Encode(writer io.Writer) error {
+	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
 	}
 	return stream.Encode(writer)
 }
 
+// Bytes encodes the structure into a TLV stream and returns the bytes.
+func (q *QuoteRequestMsgData) Bytes() ([]byte, error) {
+	var b bytes.Buffer
+	err := q.Encode(&b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
+}
+
 // DecodeRecords provides all TLV records for decoding.
-func (q *QuoteRequest) DecodeRecords() []tlv.Record {
+func (q *QuoteRequestMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
-		QuoteRequestIDRecord(&q.ID),
-		QuoteRequestAssetIDRecord(&q.AssetID),
-		QuoteRequestGroupKeyRecord(&q.AssetGroupKey),
-		QuoteRequestAssetAmountRecord(&q.AssetAmount),
-		QuoteRequestAmtCharacteristicRecord(&q.SuggestedRateTick),
+		QuoteRequestMsgDataIDRecord(&q.ID),
+		QuoteRequestMsgDataAssetIDRecord(&q.AssetID),
+		QuoteRequestMsgDataGroupKeyRecord(&q.AssetGroupKey),
+		QuoteRequestMsgDataAssetAmountRecord(&q.AssetAmount),
+		QuoteRequestMsgDataAmtCharacteristicRecord(&q.AmtCharacteristic),
 	}
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *QuoteRequest) Decode(r io.Reader) error {
-	stream, err := tlv.NewStream(q.DecodeRecords()...)
+func (q *QuoteRequestMsgData) Decode(r io.Reader) error {
+	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
 	}
 	return stream.Decode(r)
+}
+
+// QuoteRequest is a struct that represents a request for a quote (RFQ).
+type QuoteRequest struct {
+	// Peer is the peer that sent the quote request.
+	Peer route.Vertex
+
+	// QuoteRequestMsgData is the message data from the quote request.
+	QuoteRequestMsgData
+}
+
+// Validate ensures that the quote request is valid.
+func (q *QuoteRequest) Validate() error {
+	return q.QuoteRequestMsgData.Validate()
+}
+
+// NewQuoteRequestFromCustomMsg creates a new quote request from a custom
+// message.
+func NewQuoteRequestFromCustomMsg(
+	rawMsg lndclient.CustomMessage) (*QuoteRequest, error) {
+
+	msgData, err := NewQuoteRequestMsgDataFromBytes(rawMsg.Data)
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode quote "+
+			"request message data: %w", err)
+	}
+
+	quoteRequest := QuoteRequest{
+		Peer:                rawMsg.Peer,
+		QuoteRequestMsgData: *msgData,
+	}
+
+	// Perform basic sanity checks on the quote request.
+	err = quoteRequest.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("unable to validate quote request: "+
+			"%w", err)
+	}
+
+	return &quoteRequest, nil
 }

@@ -159,7 +159,7 @@ func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
 	return nil
 }
 
-func (m *Manager) handleOutgoingAcceptedQuote(quoteAccept msg.QuoteAccept) error {
+func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
 	err := m.rfqStreamHandle.HandleOutgoingQuoteAccept(quoteAccept)
 	if err != nil {
 		return fmt.Errorf("error handling outgoing quote accept: %w",
@@ -194,14 +194,14 @@ func (m *Manager) mainEventLoop() error {
 				errStream)
 
 		// Handle accepted quotes.
-		case quoteReq := <-acceptedQuotes.ChanOut():
+		case acceptedQuote := <-acceptedQuotes.ChanOut():
 			log.Debugf("RFQ manager has received an accepted " +
 				"quote.")
 
-			err := m.handleAcceptedQuote(quoteReq)
+			err := m.handleOutgoingQuoteAccept(acceptedQuote)
 			if err != nil {
-				log.Warnf("Error handling accepted quote: %v",
-					err)
+				log.Warnf("Error handling outgoing quote "+
+					"accept: %v", err)
 			}
 
 		case <-m.Quit:
