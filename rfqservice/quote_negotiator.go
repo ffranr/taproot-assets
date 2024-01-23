@@ -44,7 +44,6 @@ func NewQuoteNegotiator() (*QuoteNegotiator, error) {
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
 func (h *QuoteNegotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
-
 	// TODO(ffranr): Push quote request onto queue. We will need to handle
 	//  quote requests synchronously, because we may need to contact
 	//  an external oracle service for each request.
@@ -58,7 +57,6 @@ func (h *QuoteNegotiator) Start() error {
 
 	for {
 		select {
-
 		case quoteRequest := <-h.incomingQuoteRequests:
 			quoteRequest = quoteRequest
 

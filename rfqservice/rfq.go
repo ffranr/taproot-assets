@@ -149,7 +149,6 @@ func (m *Manager) initSubsystems(ctx context.Context) error {
 
 // handleIncomingQuoteRequest handles an incoming quote request.
 func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
-
 	err := m.quoteNegotiator.HandleIncomingQuoteRequest(quoteReq)
 	if err != nil {
 		return fmt.Errorf("error handling incoming quote request: %w",
@@ -176,7 +175,6 @@ func (m *Manager) mainEventLoop() error {
 
 	for {
 		select {
-
 		// Handle new incoming quote requests.
 		case quoteReq := <-newIncomingQuotes.ChanOut():
 			log.Debugf("RFQ manager has received an incoming " +

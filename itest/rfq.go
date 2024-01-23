@@ -1,7 +1,7 @@
 package itest
 
 import (
-	"math/rand"
+	"crypto/rand"
 	"time"
 
 	"github.com/lightninglabs/taproot-assets/internal/test"
@@ -31,6 +31,7 @@ func testQuoteRequest(t *harnessTest) {
 		randomQuoteRequestId, nil, randomGroupPrivateKey.PubKey(), 42,
 		10,
 	)
+	require.NoError(t.t, err, "unable to create quote request message data")
 
 	// TLV encode the quote request.
 	quoteReqBytes, err := quoteRequestMsgData.Bytes()

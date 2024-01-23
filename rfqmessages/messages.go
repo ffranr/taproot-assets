@@ -23,4 +23,8 @@ const (
 	// MsgTypeQuoteAccept is the message type identifier for a quote
 	// accept message.
 	MsgTypeQuoteAccept = TapMessageTypeBaseOffset + 2
+
+	// MsgTypeQuoteReject is the message type identifier for a quote
+	// reject message.
+	MsgTypeQuoteReject = TapMessageTypeBaseOffset + 3
 )

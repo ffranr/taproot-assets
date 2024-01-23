@@ -79,14 +79,14 @@ func NewStreamHandler(ctx context.Context,
 	return &streamHandler, nil
 }
 
-// handleIncomingRawMessage handles an incoming raw peer message.
+// handleIncomingQuoteRequest handles an incoming quote request peer message.
 func (h *StreamHandler) handleIncomingQuoteRequest(
 	rawMsg lndclient.CustomMessage) error {
 
 	quoteRequest, err := msg.NewQuoteRequestFromCustomMsg(rawMsg)
 	if err != nil {
-		return fmt.Errorf("unable to create new quote request "+
-			"message: %w", err)
+		return fmt.Errorf("unable to create a quote request message "+
+			"from a lndclient custom message: %w", err)
 	}
 
 	// TODO(ffranr): Determine whether to keep or discard the RFQ message
@@ -104,6 +104,34 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 	return nil
 }
 
+// handleIncomingQuoteAccept handles an incoming quote accept peer message.
+func (h *StreamHandler) handleIncomingQuoteAccept(
+	rawMsg lndclient.CustomMessage) error {
+
+	quoteAccept, err := msg.NewQuoteAcceptFromCustomMsg(rawMsg)
+	if err != nil {
+		return fmt.Errorf("unable to create a quote accept message "+
+			"from a lndclient custom message: %w", err)
+	}
+	quoteAccept = quoteAccept
+
+	return nil
+}
+
+// handleIncomingQuoteReject handles an incoming quote reject peer message.
+func (h *StreamHandler) handleIncomingQuoteReject(
+	rawMsg lndclient.CustomMessage) error {
+
+	quoteReject, err := msg.NewQuoteRejectFromCustomMsg(rawMsg)
+	if err != nil {
+		return fmt.Errorf("unable to create a quote reject message "+
+			"from a lndclient custom message: %w", err)
+	}
+	quoteReject = quoteReject
+
+	return nil
+}
+
 // handleIncomingRawMessage handles an incoming raw peer message.
 func (h *StreamHandler) handleIncomingRawMessage(
 	rawMsg lndclient.CustomMessage) error {
@@ -117,7 +145,18 @@ func (h *StreamHandler) handleIncomingRawMessage(
 		}
 
 	case msg.MsgTypeQuoteAccept:
-		// TODO(ffranr): handle incoming quote accept message.
+		err := h.handleIncomingQuoteAccept(rawMsg)
+		if err != nil {
+			return fmt.Errorf("unable to handle incoming quote "+
+				"accept message: %w", err)
+		}
+
+	case msg.MsgTypeQuoteReject:
+		err := h.handleIncomingQuoteReject(rawMsg)
+		if err != nil {
+			return fmt.Errorf("unable to handle incoming quote "+
+				"reject message: %w", err)
+		}
 
 	default:
 		// Silently disregard any irrelevant message if we don't

@@ -41,8 +41,8 @@ func QuoteAcceptMsgDataSig(sig *[64]byte) tlv.Record {
 	)
 }
 
-// QuoteAcceptMsgData is a struct that represents a request for a quote (RFQ) from a
-// peer.
+// QuoteAcceptMsgData is a struct that represents the data field of a quote
+// accept custom message.
 type QuoteAcceptMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
@@ -54,8 +54,8 @@ type QuoteAcceptMsgData struct {
 	// ExpirySeconds is the number of seconds until the quote expires.
 	ExpirySeconds uint64
 
-	// Sig is a signature over the serialized contents of the message.
-	Sig [64]byte
+	// sig is a signature over the serialized contents of the message.
+	sig [64]byte
 }
 
 //func NewQuoteAcceptMsgData(q *QuoteAccept) (*QuoteAcceptMsgData, error) {
@@ -86,12 +86,12 @@ type QuoteAcceptMsgData struct {
 //		ID:                q.ID,
 //		AmtCharacteristic: q.AmtCharacteristic,
 //		ExpirySeconds:     q.ExpirySeconds,
-//		//Sig:               sig,
+//		//sig:               sig,
 //	}, nil
 //}
 
-// EncodeRecords determines the non-nil records to include when encoding an
-// asset witness at runtime.
+// EncodeRecords determines the non-nil records to include when encoding at
+// runtime.
 func (q *QuoteAcceptMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
@@ -111,7 +111,7 @@ func (q *QuoteAcceptMsgData) encodeRecords() []tlv.Record {
 
 	// Add signature record.
 	records = append(
-		records, QuoteAcceptMsgDataSig(&q.Sig),
+		records, QuoteAcceptMsgDataSig(&q.sig),
 	)
 
 	return records
@@ -132,7 +132,7 @@ func (q *QuoteAcceptMsgData) decodeRecords() []tlv.Record {
 		QuoteAcceptMsgDataIDRecord(&q.ID),
 		QuoteAcceptMsgDataCharacteristicRecord(&q.AmtCharacteristic),
 		QuoteAcceptMsgDataExpiryRecord(&q.ExpirySeconds),
-		QuoteAcceptMsgDataSig(&q.Sig),
+		QuoteAcceptMsgDataSig(&q.sig),
 	}
 }
 
@@ -150,8 +150,27 @@ type QuoteAccept struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// QuoteAcceptMsgData is the message data from the quote accept message.
+	// QuoteAcceptMsgData is the message data for the quote accept message.
 	QuoteAcceptMsgData
+}
+
+// NewQuoteAcceptFromCustomMsg creates a new quote accept message from a
+// lndclient custom message.
+func NewQuoteAcceptFromCustomMsg(
+	customMsg lndclient.CustomMessage) (*QuoteAccept, error) {
+
+	// Decode message data component from TLV bytes.
+	var msgData QuoteAcceptMsgData
+	err := msgData.Decode(bytes.NewReader(customMsg.Data))
+	if err != nil {
+		return nil, fmt.Errorf("unable to decode quote accept "+
+			"message data: %w", err)
+	}
+
+	return &QuoteAccept{
+		Peer:               customMsg.Peer,
+		QuoteAcceptMsgData: msgData,
+	}, nil
 }
 
 // LndCustomMsg returns a custom message that can be sent to a peer using the

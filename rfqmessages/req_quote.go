@@ -166,7 +166,7 @@ func (q *QuoteRequestMsgData) Validate() error {
 }
 
 // EncodeRecords determines the non-nil records to include when encoding an
-// asset witness at runtime.
+// at runtime.
 func (q *QuoteRequestMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
@@ -234,7 +234,8 @@ type QuoteRequest struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// QuoteRequestMsgData is the message data from the quote request.
+	// QuoteRequestMsgData is the message data for the quote request
+	// message.
 	QuoteRequestMsgData
 }
 
@@ -246,16 +247,16 @@ func (q *QuoteRequest) Validate() error {
 // NewQuoteRequestFromCustomMsg creates a new quote request from a custom
 // message.
 func NewQuoteRequestFromCustomMsg(
-	rawMsg lndclient.CustomMessage) (*QuoteRequest, error) {
+	customMsg lndclient.CustomMessage) (*QuoteRequest, error) {
 
-	msgData, err := NewQuoteRequestMsgDataFromBytes(rawMsg.Data)
+	msgData, err := NewQuoteRequestMsgDataFromBytes(customMsg.Data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote "+
 			"request message data: %w", err)
 	}
 
 	quoteRequest := QuoteRequest{
-		Peer:                rawMsg.Peer,
+		Peer:                customMsg.Peer,
 		QuoteRequestMsgData: *msgData,
 	}
 
