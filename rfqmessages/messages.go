@@ -1,6 +1,7 @@
 package rfqmessages
 
 import (
+	"github.com/lightninglabs/lndclient"
 	"github.com/lightningnetwork/lnd/lnwire"
 )
 
@@ -28,3 +29,11 @@ const (
 	// reject message.
 	MsgTypeQuoteReject = TapMessageTypeBaseOffset + 3
 )
+
+// OutgoingMessage is an interface that represents an outbound message that can
+// be sent to a peer.
+type OutgoingMessage interface {
+	// LndClientCustomMsg returns a custom message that can be sent to a
+	// peer using the lndclient.
+	LndClientCustomMsg() (lndclient.CustomMessage, error)
+}

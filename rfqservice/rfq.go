@@ -63,7 +63,7 @@ func (m *Manager) Start() error {
 		ctx, cancel := m.WithCtxQuitNoTimeout()
 
 		log.Info("Initializing RFQ subsystems")
-		err := m.initSubsystems(ctx)
+		err := m.startSubsystems(ctx)
 		if err != nil {
 			startErr = err
 			return
@@ -75,8 +75,16 @@ func (m *Manager) Start() error {
 			defer func() {
 				m.Wg.Done()
 
-				// Cancel the context to stop all subsystems
-				// if the main event loop exits.
+				// Attempt to stop all subsystems if the main
+				// event loop exits.
+				err = m.stopSubsystems()
+				if err != nil {
+					log.Errorf("Error stopping RFQ "+
+						"subsystems: %v", err)
+				}
+
+				// The context can now be cancelled as all
+				// dependant components have been stopped.
 				defer cancel()
 			}()
 
@@ -96,28 +104,15 @@ func (m *Manager) Stop() error {
 	var stopErr error
 
 	m.stopOnce.Do(func() {
-		log.Info("Stopping RFQ manager")
-
-		err := m.rfqStreamHandle.Stop()
-		if err != nil {
-			stopErr = fmt.Errorf("error stopping RFQ stream "+
-				"handler: %w", err)
-			return
-		}
-
-		err = m.quoteNegotiator.Stop()
-		if err != nil {
-			stopErr = fmt.Errorf("error stopping RFQ quote "+
-				"negotiator: %w", err)
-			return
-		}
+		log.Info("Stopping RFQ system")
+		stopErr = m.stopSubsystems()
 	})
 
 	return stopErr
 }
 
-// initSubsystems initializes the RFQ subsystems.
-func (m *Manager) initSubsystems(ctx context.Context) error {
+// startSubsystems starts the RFQ subsystems.
+func (m *Manager) startSubsystems(ctx context.Context) error {
 	var err error
 
 	// Initialise the RFQ raw message stream handler.
@@ -147,8 +142,28 @@ func (m *Manager) initSubsystems(ctx context.Context) error {
 	return err
 }
 
+// stopSubsystems stops the RFQ subsystems.
+func (m *Manager) stopSubsystems() error {
+	// Stop the RFQ stream handler.
+	err := m.rfqStreamHandle.Stop()
+	if err != nil {
+		return fmt.Errorf("error stopping RFQ stream handler: %w", err)
+	}
+
+	// Stop the RFQ quote negotiator.
+	err = m.quoteNegotiator.Stop()
+	if err != nil {
+		return fmt.Errorf("error stopping RFQ quote negotiator: %w",
+			err)
+	}
+
+	return nil
+}
+
 // handleIncomingQuoteRequest handles an incoming quote request.
 func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
+	// Forward the incoming quote request to the quote negotiator so that
+	// it may determine whether the quote should be accepted or rejected.
 	err := m.quoteNegotiator.HandleIncomingQuoteRequest(quoteReq)
 	if err != nil {
 		return fmt.Errorf("error handling incoming quote request: %w",
@@ -158,8 +173,13 @@ func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
 	return nil
 }
 
+// handleOutgoingQuoteAccept handles an outgoing quote accept message.
 func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
-	err := m.rfqStreamHandle.HandleOutgoingQuoteAccept(quoteAccept)
+	// TODO(ffranr): Inform the order manager that the quote has been
+	//  accepted.
+
+	// Send the quote accept message to the peer.
+	err := m.rfqStreamHandle.HandleOutgoingMessage(&quoteAccept)
 	if err != nil {
 		return fmt.Errorf("error handling outgoing quote accept: %w",
 			err)
@@ -170,13 +190,21 @@ func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
 
 // mainEventLoop is the main event loop of the RFQ manager.
 func (m *Manager) mainEventLoop() error {
-	newIncomingQuotes := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
-	acceptedQuotes := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
+	// Incoming message channels.
+	incomingQuoteRequests := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
+	incomingQuoteAccept := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
+	incomingQuoteReject := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
+
+	// Outgoing message channels.
+	outgoingQuoteRequest := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
+	outgoingQuoteAccept := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
+	outgoingQuoteReject := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
 
 	for {
 		select {
-		// Handle new incoming quote requests.
-		case quoteReq := <-newIncomingQuotes.ChanOut():
+		// Handle incoming (received) quote requests from the peer
+		// message stream handler.
+		case quoteReq := <-incomingQuoteRequests.ChanOut():
 			log.Debugf("RFQ manager has received an incoming " +
 				"quote request")
 
@@ -186,15 +214,10 @@ func (m *Manager) mainEventLoop() error {
 					"request: %v", err)
 			}
 
-		// Handle errors from the RFQ stream handler.
-		case errStream := <-m.rfqStreamHandle.ErrChan:
-			log.Warnf("Error received from RFQ stream handler: %w",
-				errStream)
-
 		// Handle accepted quotes.
-		case acceptedQuote := <-acceptedQuotes.ChanOut():
-			log.Debugf("RFQ manager has received an accepted " +
-				"quote.")
+		case acceptedQuote := <-outgoingQuoteAccept.ChanOut():
+			log.Debugf("RFQ manager has received an outgoing " +
+				"quote accept message.")
 
 			err := m.handleOutgoingQuoteAccept(acceptedQuote)
 			if err != nil {

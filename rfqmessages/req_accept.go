@@ -173,19 +173,19 @@ func NewQuoteAcceptFromCustomMsg(
 	}, nil
 }
 
-// LndCustomMsg returns a custom message that can be sent to a peer using the
-// lndclient.
-func (q *QuoteAccept) LndCustomMsg() (*lndclient.CustomMessage, error) {
+// LndClientCustomMsg returns a custom message that can be sent to a peer using
+// the lndclient.
+func (q *QuoteAccept) LndClientCustomMsg() (lndclient.CustomMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
 	err := q.QuoteAcceptMsgData.Encode(buff)
 	if err != nil {
-		return nil, fmt.Errorf("unable to encode quote accept "+
-			"message data: %w", err)
+		return lndclient.CustomMessage{}, fmt.Errorf("unable to "+
+			"encode quote accept message data: %w", err)
 	}
 	quoteAcceptBytes := buff.Bytes()
 
-	return &lndclient.CustomMessage{
+	return lndclient.CustomMessage{
 		Peer:    q.Peer,
 		MsgType: MsgTypeQuoteAccept,
 		Data:    quoteAcceptBytes,

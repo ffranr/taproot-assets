@@ -29,11 +29,11 @@ type StreamHandler struct {
 	errRecvRawMessages <-chan error
 
 	// IncomingQuoteRequests is a channel which is populated with incoming
-	// (received) and processed requests for quote (RFQ) messages.
+	// (received) and valid quote request messages.
 	IncomingQuoteRequests *fn.EventReceiver[msg.QuoteRequest]
 
-	// ErrChan is the handle's error reporting channel.
-	ErrChan <-chan error
+	// errChan is this system's error reporting channel.
+	errChan chan error
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
@@ -42,9 +42,9 @@ type StreamHandler struct {
 
 // NewStreamHandler creates and starts a new RFQ stream handler.
 func NewStreamHandler(ctx context.Context,
-	peerMessagePorter PeerMessagePorter) (*StreamHandler, error) {
+	peerMsgPorter PeerMessagePorter) (*StreamHandler, error) {
 
-	msgChan, errChan, err := peerMessagePorter.SubscribeCustomMessages(ctx)
+	msgChan, peerMsgErrChan, err := peerMsgPorter.SubscribeCustomMessages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to custom "+
 			"messages via message transfer handle: %w", err)
@@ -55,14 +55,11 @@ func NewStreamHandler(ctx context.Context,
 	)
 
 	streamHandler := StreamHandler{
-		peerMessagePorter: peerMessagePorter,
-
+		peerMessagePorter:  peerMsgPorter,
 		recvRawMessages:    msgChan,
-		errRecvRawMessages: errChan,
+		errRecvRawMessages: peerMsgErrChan,
 
 		IncomingQuoteRequests: incomingQuoteRequests,
-
-		ErrChan: make(<-chan error),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -159,31 +156,31 @@ func (h *StreamHandler) handleIncomingRawMessage(
 		}
 
 	default:
-		// Silently disregard any irrelevant message if we don't
-		// recognise the message type.
+		// Silently disregard any messages were we don't recognise the
+		// message type.
 		return nil
 	}
 
 	return nil
 }
 
-// HandleOutgoingQuoteAccept handles an outgoing quote accept message.
-func (h *StreamHandler) HandleOutgoingQuoteAccept(
-	quoteAccept msg.QuoteAccept) error {
+// HandleOutgoingMessage handles an outgoing RFQ message.
+func (h *StreamHandler) HandleOutgoingMessage(
+	outgoingMsg msg.OutgoingMessage) error {
 
-	outgoingMsg, err := quoteAccept.LndCustomMsg()
+	lndClientCustomMsg, err := outgoingMsg.LndClientCustomMsg()
 	if err != nil {
-		return fmt.Errorf("unable to create outgoing quote accept "+
+		return fmt.Errorf("unable to create lndclient custom "+
 			"message: %w", err)
 	}
 
-	// Send the quote accept message to the peer.
+	// Send the message to the peer.
 	ctx, cancel := h.WithCtxQuitNoTimeout()
 	defer cancel()
 
-	err = h.peerMessagePorter.SendCustomMessage(ctx, *outgoingMsg)
+	err = h.peerMessagePorter.SendCustomMessage(ctx, lndClientCustomMsg)
 	if err != nil {
-		return fmt.Errorf("unable to send quote accept message: %w",
+		return fmt.Errorf("unable to send message to peer: %w",
 			err)
 	}
 
