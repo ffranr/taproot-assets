@@ -115,17 +115,14 @@ func (m *Manager) Stop() error {
 func (m *Manager) startSubsystems(ctx context.Context) error {
 	var err error
 
-	// Initialise the RFQ raw message stream handler.
-	m.Wg.Add(1)
-	go func() {
-		defer m.Wg.Done()
-		m.rfqStreamHandle, err = NewStreamHandler(
-			ctx, m.cfg.PeerMessagePorter,
-		)
-	}()
-	if err != nil {
-		return fmt.Errorf("error initializing RFQ stream handler: %w",
-			err)
+	// Initialise and start the RFQ peer message stream handler.
+	m.rfqStreamHandle, err = NewStreamHandler(
+		ctx, m.cfg.PeerMessagePorter,
+	)
+
+	if err := m.rfqStreamHandle.Start(); err != nil {
+		return fmt.Errorf("unable to start RFQ subsystem service: "+
+			"peer message stream handler: %v", err)
 	}
 
 	// Initialise the RFQ quote negotiator.
@@ -192,13 +189,13 @@ func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
 func (m *Manager) mainEventLoop() error {
 	// Incoming message channels.
 	incomingQuoteRequests := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
-	incomingQuoteAccept := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
-	incomingQuoteReject := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
+	//incomingQuoteAccept := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
+	//incomingQuoteReject := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
 
 	// Outgoing message channels.
-	outgoingQuoteRequest := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
+	//outgoingQuoteRequest := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
 	outgoingQuoteAccept := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
-	outgoingQuoteReject := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
+	//outgoingQuoteReject := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
 
 	for {
 		select {

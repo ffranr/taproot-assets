@@ -3,6 +3,7 @@ package rfqservice
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
@@ -16,6 +17,9 @@ import (
 // processes those messages with the aim of extracting relevant request for
 // quotes (RFQs).
 type StreamHandler struct {
+	startOnce sync.Once
+	stopOnce  sync.Once
+
 	// peerMessagePorter is the peer message porter. This component is used
 	// to send and receive raw peer messages.
 	peerMessagePorter PeerMessagePorter
@@ -54,7 +58,7 @@ func NewStreamHandler(ctx context.Context,
 		fn.DefaultQueueSize,
 	)
 
-	streamHandler := StreamHandler{
+	return &StreamHandler{
 		peerMessagePorter:  peerMsgPorter,
 		recvRawMessages:    msgChan,
 		errRecvRawMessages: peerMsgErrChan,
@@ -65,15 +69,7 @@ func NewStreamHandler(ctx context.Context,
 			DefaultTimeout: DefaultTimeout,
 			Quit:           make(chan struct{}),
 		},
-	}
-
-	err = streamHandler.Start()
-	if err != nil {
-		return nil, fmt.Errorf("unable to start RFQ stream handler: %w",
-			err)
-	}
-
-	return &streamHandler, nil
+	}, nil
 }
 
 // handleIncomingQuoteRequest handles an incoming quote request peer message.
@@ -187,8 +183,30 @@ func (h *StreamHandler) HandleOutgoingMessage(
 	return nil
 }
 
-// Start starts the handler.
+// Start starts the service.
 func (h *StreamHandler) Start() error {
+	log.Info("Starting RFQ subsystem: peer message stream handler")
+
+	var startErr error
+	h.startOnce.Do(func() {
+		// Start the main event loop in a separate goroutine.
+		h.Wg.Add(1)
+		go func() {
+			defer h.Wg.Done()
+
+			log.Debug("Starting main event loop")
+			err := h.mainEventLoop()
+			if err != nil {
+				startErr = err
+				return
+			}
+		}()
+	})
+	return startErr
+}
+
+// mainEventLoop executes the main event handling loop.
+func (h *StreamHandler) mainEventLoop() error {
 	log.Info("Starting RFQ subsystem: peer message stream handler")
 
 	for {
