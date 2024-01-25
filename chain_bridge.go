@@ -202,6 +202,9 @@ func (l *LndRpcChainBridge) EstimateFee(ctx context.Context,
 
 // SubscribeCustomMessages creates a subscription to custom messages received
 // from our peers.
+//
+// TODO(ffranr): This should be moved into its own interface because it's not
+// related to the chain.
 func (l *LndRpcChainBridge) SubscribeCustomMessages(
 	ctx context.Context) (<-chan lndclient.CustomMessage,
 	<-chan error, error) {
@@ -210,6 +213,9 @@ func (l *LndRpcChainBridge) SubscribeCustomMessages(
 }
 
 // SendCustomMessage sends a custom message to a peer.
+//
+// TODO(ffranr): This should be moved into its own interface because it's not
+// related to the chain.
 func (l *LndRpcChainBridge) SendCustomMessage(ctx context.Context,
 	msg lndclient.CustomMessage) error {
 
