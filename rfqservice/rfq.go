@@ -36,9 +36,9 @@ type Manager struct {
 	// incoming and outgoing peer RFQ stream messages.
 	rfqStreamHandle *StreamHandler
 
-	// quoteNegotiator is the RFQ quote negotiator. This subsystem
-	// determines whether a quote is accepted or rejected.
-	quoteNegotiator *QuoteNegotiator
+	// negotiator is the RFQ quote negotiator. This subsystem determines
+	// whether a quote is accepted or rejected.
+	negotiator *Negotiator
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
@@ -129,7 +129,7 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	m.Wg.Add(1)
 	go func() {
 		defer m.Wg.Done()
-		m.quoteNegotiator, err = NewQuoteNegotiator()
+		m.negotiator, err = NewNegotiator()
 	}()
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ quote negotiator: %w",
@@ -148,7 +148,7 @@ func (m *Manager) stopSubsystems() error {
 	}
 
 	// Stop the RFQ quote negotiator.
-	err = m.quoteNegotiator.Stop()
+	err = m.negotiator.Stop()
 	if err != nil {
 		return fmt.Errorf("error stopping RFQ quote negotiator: %w",
 			err)
@@ -161,7 +161,7 @@ func (m *Manager) stopSubsystems() error {
 func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
 	// Forward the incoming quote request to the quote negotiator so that
 	// it may determine whether the quote should be accepted or rejected.
-	err := m.quoteNegotiator.HandleIncomingQuoteRequest(quoteReq)
+	err := m.negotiator.HandleIncomingQuoteRequest(quoteReq)
 	if err != nil {
 		return fmt.Errorf("error handling incoming quote request: %w",
 			err)
@@ -193,9 +193,9 @@ func (m *Manager) mainEventLoop() error {
 	//incomingQuoteReject := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
 
 	// Outgoing message channels.
-	//outgoingQuoteRequest := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
-	outgoingQuoteAccept := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
-	//outgoingQuoteReject := m.quoteNegotiator.AcceptedQuotes.NewItemCreated
+	//outgoingQuoteRequest := m.negotiator.AcceptedQuotes.NewItemCreated
+	outgoingQuoteAccept := m.negotiator.AcceptedQuotes.NewItemCreated
+	//outgoingQuoteReject := m.negotiator.AcceptedQuotes.NewItemCreated
 
 	for {
 		select {

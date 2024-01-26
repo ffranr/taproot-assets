@@ -5,10 +5,10 @@ import (
 	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
 
-// QuoteNegotiator is a struct that handles the negotiation of quotes. It is a
-// subsystem of the RFQ handling system. It determines whether a quote is
-// accepted or rejected.
-type QuoteNegotiator struct {
+// Negotiator is a struct that handles the negotiation of quotes. It is a
+// subsystem of the RFQ system. It determines whether a quote is accepted or
+// rejected.
+type Negotiator struct {
 	// AcceptedQuotes is a channel which is populated with accepted quotes.
 	AcceptedQuotes *fn.EventReceiver[msg.QuoteAccept]
 
@@ -24,13 +24,13 @@ type QuoteNegotiator struct {
 	*fn.ContextGuard
 }
 
-// NewQuoteNegotiator creates a new RFQ quote negotiator.
-func NewQuoteNegotiator() (*QuoteNegotiator, error) {
+// NewNegotiator creates a new quote negotiator.
+func NewNegotiator() (*Negotiator, error) {
 	acceptedQuotes := fn.NewEventReceiver[msg.QuoteAccept](
 		fn.DefaultQueueSize,
 	)
 
-	return &QuoteNegotiator{
+	return &Negotiator{
 		AcceptedQuotes: acceptedQuotes,
 
 		ErrChan: make(<-chan error),
@@ -43,7 +43,7 @@ func NewQuoteNegotiator() (*QuoteNegotiator, error) {
 }
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
-func (h *QuoteNegotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
+func (h *Negotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
 	// TODO(ffranr): Push quote request onto queue. We will need to handle
 	//  quote requests synchronously, because we may need to contact
 	//  an external oracle service for each request.
@@ -52,8 +52,8 @@ func (h *QuoteNegotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
 }
 
 // Start starts the event handler.
-func (h *QuoteNegotiator) Start() error {
-	log.Info("Starting RFQ subsystem: quote negotiation handler")
+func (h *Negotiator) Start() error {
+	log.Info("Starting RFQ subsystem: quote negotiator")
 
 	for {
 		select {
@@ -69,8 +69,8 @@ func (h *QuoteNegotiator) Start() error {
 }
 
 // Stop stops the handler.
-func (h *QuoteNegotiator) Stop() error {
-	log.Info("Stopping RFQ subsystem: quote negotiation handler")
+func (h *Negotiator) Stop() error {
+	log.Info("Stopping RFQ subsystem: quote negotiator")
 
 	close(h.Quit)
 	return nil
