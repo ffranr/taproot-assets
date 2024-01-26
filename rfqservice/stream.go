@@ -199,15 +199,16 @@ func (h *StreamHandler) HandleOutgoingMessage(
 }
 
 // mainEventLoop executes the main event handling loop.
-func (h *StreamHandler) mainEventLoop() error {
+func (h *StreamHandler) mainEventLoop() {
 	log.Debug("Starting stream handler event loop")
 
 	for {
 		select {
 		case rawMsg, ok := <-h.recvRawMessages:
 			if !ok {
-				return fmt.Errorf("raw custom messages " +
-					"channel closed unexpectedly")
+				log.Warnf("raw custom messages channel " +
+					"closed unexpectedly")
+				return
 			}
 
 			err := h.handleIncomingRawMessage(rawMsg)
@@ -219,11 +220,13 @@ func (h *StreamHandler) mainEventLoop() error {
 		case errSubCustomMessages := <-h.errRecvRawMessages:
 			// If we receive an error from the peer message
 			// subscription, we'll terminate the stream handler.
-			return fmt.Errorf("error received from RFQ stream "+
-				"handler: %w", errSubCustomMessages)
+			log.Warnf("Error received from RFQ stream handler: %v",
+				errSubCustomMessages)
 
 		case <-h.Quit:
-			return nil
+			log.Debug("Received quit signal. Stopping stream " +
+				"handler event loop")
+			return
 		}
 	}
 }
@@ -238,12 +241,7 @@ func (h *StreamHandler) Start() error {
 		h.Wg.Add(1)
 		go func() {
 			defer h.Wg.Done()
-
-			err := h.mainEventLoop()
-			if err != nil {
-				startErr = err
-				return
-			}
+			h.mainEventLoop()
 		}()
 	})
 	return startErr

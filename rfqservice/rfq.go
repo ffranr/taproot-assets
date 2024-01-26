@@ -85,15 +85,11 @@ func (m *Manager) Start() error {
 
 				// The context can now be cancelled as all
 				// dependant components have been stopped.
-				defer cancel()
+				cancel()
 			}()
 
 			log.Info("Starting RFQ manager main event loop")
-			err = m.mainEventLoop()
-			if err != nil {
-				startErr = err
-				return
-			}
+			m.mainEventLoop()
 		}()
 	})
 	return startErr
@@ -190,7 +186,7 @@ func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
 }
 
 // mainEventLoop is the main event loop of the RFQ manager.
-func (m *Manager) mainEventLoop() error {
+func (m *Manager) mainEventLoop() {
 	// Incoming message channels.
 	incomingQuoteRequests := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
 	//incomingQuoteAccept := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
@@ -229,7 +225,7 @@ func (m *Manager) mainEventLoop() error {
 		case <-m.Quit:
 			log.Debug("RFQ manager main event loop has received " +
 				"the shutdown signal")
-			return nil
+			return
 		}
 	}
 }

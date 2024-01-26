@@ -57,7 +57,7 @@ func (h *Negotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
 }
 
 // mainEventLoop executes the main event handling loop.
-func (h *Negotiator) mainEventLoop() error {
+func (h *Negotiator) mainEventLoop() {
 	log.Debug("Starting negotiator event loop")
 
 	for {
@@ -68,7 +68,9 @@ func (h *Negotiator) mainEventLoop() error {
 		// TODO(ffranr): Consume from quote request queue channel here.
 
 		case <-h.Quit:
-			return nil
+			log.Debug("Received quit signal. Stopping negotiator " +
+				"event loop")
+			return
 		}
 	}
 }
@@ -83,12 +85,7 @@ func (h *Negotiator) Start() error {
 		h.Wg.Add(1)
 		go func() {
 			defer h.Wg.Done()
-
-			err := h.mainEventLoop()
-			if err != nil {
-				startErr = err
-				return
-			}
+			h.mainEventLoop()
 		}()
 	})
 	return startErr
