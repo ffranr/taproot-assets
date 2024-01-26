@@ -115,25 +115,29 @@ func (m *Manager) Stop() error {
 func (m *Manager) startSubsystems(ctx context.Context) error {
 	var err error
 
-	// Initialise and start the RFQ peer message stream handler.
+	// Initialise and start the peer message stream handler.
 	m.rfqStreamHandle, err = NewStreamHandler(
 		ctx, m.cfg.PeerMessagePorter,
 	)
+	if err != nil {
+		return fmt.Errorf("error initializing RFQ subsystem service: "+
+			"peer message stream handler: %v", err)
+	}
 
 	if err := m.rfqStreamHandle.Start(); err != nil {
 		return fmt.Errorf("unable to start RFQ subsystem service: "+
 			"peer message stream handler: %v", err)
 	}
 
-	// Initialise the RFQ quote negotiator.
-	m.Wg.Add(1)
-	go func() {
-		defer m.Wg.Done()
-		m.negotiator, err = NewNegotiator()
-	}()
+	// Initialise and start the quote negotiator.
+	m.negotiator, err = NewNegotiator()
 	if err != nil {
-		return fmt.Errorf("error initializing RFQ quote negotiator: %w",
+		return fmt.Errorf("error initializing RFQ negotiator: %w",
 			err)
+	}
+
+	if err := m.negotiator.Start(); err != nil {
+		return fmt.Errorf("unable to start RFQ negotiator: %v", err)
 	}
 
 	return err

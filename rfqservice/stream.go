@@ -198,31 +198,9 @@ func (h *StreamHandler) HandleOutgoingMessage(
 	return nil
 }
 
-// Start starts the service.
-func (h *StreamHandler) Start() error {
-	log.Info("Starting RFQ subsystem: peer message stream handler")
-
-	var startErr error
-	h.startOnce.Do(func() {
-		// Start the main event loop in a separate goroutine.
-		h.Wg.Add(1)
-		go func() {
-			defer h.Wg.Done()
-
-			log.Debug("Starting main event loop")
-			err := h.mainEventLoop()
-			if err != nil {
-				startErr = err
-				return
-			}
-		}()
-	})
-	return startErr
-}
-
 // mainEventLoop executes the main event handling loop.
 func (h *StreamHandler) mainEventLoop() error {
-	log.Info("Starting RFQ subsystem: peer message stream handler")
+	log.Debug("Starting stream handler event loop")
 
 	for {
 		select {
@@ -248,6 +226,27 @@ func (h *StreamHandler) mainEventLoop() error {
 			return nil
 		}
 	}
+}
+
+// Start starts the service.
+func (h *StreamHandler) Start() error {
+	log.Info("Starting RFQ subsystem: peer message stream handler")
+
+	var startErr error
+	h.startOnce.Do(func() {
+		// Start the main event loop in a separate goroutine.
+		h.Wg.Add(1)
+		go func() {
+			defer h.Wg.Done()
+
+			err := h.mainEventLoop()
+			if err != nil {
+				startErr = err
+				return
+			}
+		}()
+	})
+	return startErr
 }
 
 // Stop stops the handler.

@@ -1,6 +1,8 @@
 package rfqservice
 
 import (
+	"sync"
+
 	"github.com/lightninglabs/taproot-assets/fn"
 	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
@@ -9,6 +11,9 @@ import (
 // subsystem of the RFQ system. It determines whether a quote is accepted or
 // rejected.
 type Negotiator struct {
+	startOnce sync.Once
+	stopOnce  sync.Once
+
 	// AcceptedQuotes is a channel which is populated with accepted quotes.
 	AcceptedQuotes *fn.EventReceiver[msg.QuoteAccept]
 
@@ -51,9 +56,9 @@ func (h *Negotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
 	return nil
 }
 
-// Start starts the event handler.
-func (h *Negotiator) Start() error {
-	log.Info("Starting RFQ subsystem: quote negotiator")
+// mainEventLoop executes the main event handling loop.
+func (h *Negotiator) mainEventLoop() error {
+	log.Debug("Starting negotiator event loop")
 
 	for {
 		select {
@@ -66,6 +71,27 @@ func (h *Negotiator) Start() error {
 			return nil
 		}
 	}
+}
+
+// Start starts the event handler.
+func (h *Negotiator) Start() error {
+	log.Info("Starting RFQ subsystem: negotiator")
+
+	var startErr error
+	h.startOnce.Do(func() {
+		// Start the main event loop in a separate goroutine.
+		h.Wg.Add(1)
+		go func() {
+			defer h.Wg.Done()
+
+			err := h.mainEventLoop()
+			if err != nil {
+				startErr = err
+				return
+			}
+		}()
+	})
+	return startErr
 }
 
 // Stop stops the handler.
