@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lightninglabs/lndclient"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/tlv"
 )
@@ -42,7 +41,7 @@ func QuoteAcceptMsgDataSig(sig *[64]byte) tlv.Record {
 }
 
 // QuoteAcceptMsgData is a struct that represents the data field of a quote
-// accept custom message.
+// accept message.
 type QuoteAcceptMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
@@ -154,40 +153,39 @@ type QuoteAccept struct {
 	QuoteAcceptMsgData
 }
 
-// NewQuoteAcceptFromCustomMsg creates a new quote accept message from a
-// lndclient custom message.
-func NewQuoteAcceptFromCustomMsg(
-	customMsg lndclient.CustomMessage) (*QuoteAccept, error) {
-
+// NewQuoteAcceptFromWireMsg instantiates a new instance from a wire message.
+func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*QuoteAccept, error) {
 	// Decode message data component from TLV bytes.
 	var msgData QuoteAcceptMsgData
-	err := msgData.Decode(bytes.NewReader(customMsg.Data))
+	err := msgData.Decode(bytes.NewReader(wireMsg.Data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote accept "+
 			"message data: %w", err)
 	}
 
 	return &QuoteAccept{
-		Peer:               customMsg.Peer,
+		Peer:               wireMsg.Peer,
 		QuoteAcceptMsgData: msgData,
 	}, nil
 }
 
-// LndClientCustomMsg returns a custom message that can be sent to a peer using
-// the lndclient.
-func (q *QuoteAccept) LndClientCustomMsg() (lndclient.CustomMessage, error) {
+// ToWire returns a wire message with a serialized data field.
+func (q *QuoteAccept) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
 	err := q.QuoteAcceptMsgData.Encode(buff)
 	if err != nil {
-		return lndclient.CustomMessage{}, fmt.Errorf("unable to "+
-			"encode quote accept message data: %w", err)
+		return WireMessage{}, fmt.Errorf("unable to encode message "+
+			"data: %w", err)
 	}
-	quoteAcceptBytes := buff.Bytes()
+	msgDataBytes := buff.Bytes()
 
-	return lndclient.CustomMessage{
+	return WireMessage{
 		Peer:    q.Peer,
 		MsgType: MsgTypeQuoteAccept,
-		Data:    quoteAcceptBytes,
+		Data:    msgDataBytes,
 	}, nil
 }
+
+// Ensure that the message type implements the OutgoingMessage interface.
+var _ OutgoingMessage = (*QuoteAccept)(nil)

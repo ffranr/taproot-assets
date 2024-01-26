@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/tlv"
@@ -87,7 +86,7 @@ func QuoteRequestMsgDataAmtCharacteristicRecord(amtCharacteristic *uint64) tlv.R
 }
 
 // QuoteRequestMsgData is a struct that represents the message data from a
-// custom message request for a quote (RFQ).
+// quote request message.
 type QuoteRequestMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
@@ -244,19 +243,16 @@ func (q *QuoteRequest) Validate() error {
 	return q.QuoteRequestMsgData.Validate()
 }
 
-// NewQuoteRequestFromCustomMsg creates a new quote request from a custom
-// message.
-func NewQuoteRequestFromCustomMsg(
-	customMsg lndclient.CustomMessage) (*QuoteRequest, error) {
-
-	msgData, err := NewQuoteRequestMsgDataFromBytes(customMsg.Data)
+// NewQuoteRequestFromWireMsg instantiates a new instance from a wire message.
+func NewQuoteRequestFromWireMsg(wireMsg WireMessage) (*QuoteRequest, error) {
+	msgData, err := NewQuoteRequestMsgDataFromBytes(wireMsg.Data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote "+
 			"request message data: %w", err)
 	}
 
 	quoteRequest := QuoteRequest{
-		Peer:                customMsg.Peer,
+		Peer:                wireMsg.Peer,
 		QuoteRequestMsgData: *msgData,
 	}
 
@@ -269,3 +265,24 @@ func NewQuoteRequestFromCustomMsg(
 
 	return &quoteRequest, nil
 }
+
+// ToWire returns a wire message with a serialized data field.
+func (q *QuoteRequest) ToWire() (WireMessage, error) {
+	// Encode message data component as TLV bytes.
+	var buff *bytes.Buffer
+	err := q.QuoteRequestMsgData.Encode(buff)
+	if err != nil {
+		return WireMessage{}, fmt.Errorf("unable to encode message "+
+			"data: %w", err)
+	}
+	msgDataBytes := buff.Bytes()
+
+	return WireMessage{
+		Peer:    q.Peer,
+		MsgType: MsgTypeQuoteRequest,
+		Data:    msgDataBytes,
+	}, nil
+}
+
+// Ensure that the message type implements the OutgoingMessage interface.
+var _ OutgoingMessage = (*QuoteRequest)(nil)

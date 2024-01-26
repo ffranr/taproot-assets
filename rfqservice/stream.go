@@ -74,9 +74,9 @@ func NewStreamHandler(ctx context.Context,
 
 // handleIncomingQuoteRequest handles an incoming quote request peer message.
 func (h *StreamHandler) handleIncomingQuoteRequest(
-	rawMsg lndclient.CustomMessage) error {
+	wireMsg msg.WireMessage) error {
 
-	quoteRequest, err := msg.NewQuoteRequestFromCustomMsg(rawMsg)
+	quoteRequest, err := msg.NewQuoteRequestFromWireMsg(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote request message "+
 			"from a lndclient custom message: %w", err)
@@ -99,9 +99,9 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 
 // handleIncomingQuoteAccept handles an incoming quote accept peer message.
 func (h *StreamHandler) handleIncomingQuoteAccept(
-	rawMsg lndclient.CustomMessage) error {
+	wireMsg msg.WireMessage) error {
 
-	quoteAccept, err := msg.NewQuoteAcceptFromCustomMsg(rawMsg)
+	quoteAccept, err := msg.NewQuoteAcceptFromWireMsg(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote accept message "+
 			"from a lndclient custom message: %w", err)
@@ -113,9 +113,9 @@ func (h *StreamHandler) handleIncomingQuoteAccept(
 
 // handleIncomingQuoteReject handles an incoming quote reject peer message.
 func (h *StreamHandler) handleIncomingQuoteReject(
-	rawMsg lndclient.CustomMessage) error {
+	wireMsg msg.WireMessage) error {
 
-	quoteReject, err := msg.NewQuoteRejectFromCustomMsg(rawMsg)
+	quoteReject, err := msg.NewQuoteRejectFromWireMsg(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote reject message "+
 			"from a lndclient custom message: %w", err)
@@ -129,23 +129,32 @@ func (h *StreamHandler) handleIncomingQuoteReject(
 func (h *StreamHandler) handleIncomingRawMessage(
 	rawMsg lndclient.CustomMessage) error {
 
+	// Convert the lndclient custom message into a wire message. Wire
+	// message is a RFQ package type that is used by interfaces throughout
+	// the package.
+	wireMsg := msg.WireMessage{
+		Peer:    rawMsg.Peer,
+		MsgType: rawMsg.MsgType,
+		Data:    rawMsg.Data,
+	}
+
 	switch rawMsg.MsgType {
 	case msg.MsgTypeQuoteRequest:
-		err := h.handleIncomingQuoteRequest(rawMsg)
+		err := h.handleIncomingQuoteRequest(wireMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"request message: %w", err)
 		}
 
 	case msg.MsgTypeQuoteAccept:
-		err := h.handleIncomingQuoteAccept(rawMsg)
+		err := h.handleIncomingQuoteAccept(wireMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"accept message: %w", err)
 		}
 
 	case msg.MsgTypeQuoteReject:
-		err := h.handleIncomingQuoteReject(rawMsg)
+		err := h.handleIncomingQuoteReject(wireMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"reject message: %w", err)
@@ -164,10 +173,16 @@ func (h *StreamHandler) handleIncomingRawMessage(
 func (h *StreamHandler) HandleOutgoingMessage(
 	outgoingMsg msg.OutgoingMessage) error {
 
-	lndClientCustomMsg, err := outgoingMsg.LndClientCustomMsg()
+	// Convert the outgoing message to a lndclient custom message.
+	wireMsg, err := outgoingMsg.ToWire()
 	if err != nil {
 		return fmt.Errorf("unable to create lndclient custom "+
 			"message: %w", err)
+	}
+	lndClientCustomMsg := lndclient.CustomMessage{
+		Peer:    wireMsg.Peer,
+		MsgType: wireMsg.MsgType,
+		Data:    wireMsg.Data,
 	}
 
 	// Send the message to the peer.

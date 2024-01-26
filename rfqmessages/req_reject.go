@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/lightninglabs/lndclient"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/tlv"
 )
@@ -21,7 +20,7 @@ func QuoteRejectMsgDataIDRecord(id *ID) tlv.Record {
 }
 
 // QuoteRejectMsgData is a struct that represents the data field of a quote
-// reject custom message.
+// reject message.
 type QuoteRejectMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
@@ -69,21 +68,39 @@ type QuoteReject struct {
 	QuoteRejectMsgData
 }
 
-// NewQuoteRejectFromCustomMsg creates a new quote reject message from a
-// lndclient custom message.
-func NewQuoteRejectFromCustomMsg(
-	customMsg lndclient.CustomMessage) (*QuoteReject, error) {
-
+// NewQuoteRejectFromWireMsg instantiates a new instance from a wire message.
+func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*QuoteReject, error) {
 	// Decode message data component from TLV bytes.
 	var msgData QuoteRejectMsgData
-	err := msgData.Decode(bytes.NewReader(customMsg.Data))
+	err := msgData.Decode(bytes.NewReader(wireMsg.Data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote reject "+
 			"message data: %w", err)
 	}
 
 	return &QuoteReject{
-		Peer:               customMsg.Peer,
+		Peer:               wireMsg.Peer,
 		QuoteRejectMsgData: msgData,
 	}, nil
 }
+
+// ToWire returns a wire message with a serialized data field.
+func (q *QuoteReject) ToWire() (WireMessage, error) {
+	// Encode message data component as TLV bytes.
+	var buff *bytes.Buffer
+	err := q.QuoteRejectMsgData.Encode(buff)
+	if err != nil {
+		return WireMessage{}, fmt.Errorf("unable to encode message "+
+			"data: %w", err)
+	}
+	msgDataBytes := buff.Bytes()
+
+	return WireMessage{
+		Peer:    q.Peer,
+		MsgType: MsgTypeQuoteReject,
+		Data:    msgDataBytes,
+	}, nil
+}
+
+// Ensure that the message type implements the OutgoingMessage interface.
+var _ OutgoingMessage = (*QuoteReject)(nil)

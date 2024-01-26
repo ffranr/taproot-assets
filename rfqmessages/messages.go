@@ -1,8 +1,8 @@
 package rfqmessages
 
 import (
-	"github.com/lightninglabs/lndclient"
 	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/lightningnetwork/lnd/routing/route"
 )
 
 // ID is the identifier for a RFQ message.
@@ -30,10 +30,21 @@ const (
 	MsgTypeQuoteReject = TapMessageTypeBaseOffset + 3
 )
 
-// OutgoingMessage is an interface that represents an outbound message that can
-// be sent to a peer.
+// WireMessage is a struct that represents a general wire message.
+type WireMessage struct {
+	// Peer is the origin/destination peer for this message.
+	Peer route.Vertex
+
+	// MsgType is the protocol message type number.
+	MsgType uint32
+
+	// Data is the data exchanged.
+	Data []byte
+}
+
+// OutgoingMessage is an interface that represents an outbound wire message
+// that can be sent to a peer.
 type OutgoingMessage interface {
-	// LndClientCustomMsg returns a custom message that can be sent to a
-	// peer using the lndclient.
-	LndClientCustomMsg() (lndclient.CustomMessage, error)
+	// ToWire returns a wire message with a serialized data field.
+	ToWire() (WireMessage, error)
 }
