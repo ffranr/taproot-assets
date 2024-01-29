@@ -42,7 +42,7 @@ func testQuoteRequest(t *harnessTest) {
 
 	t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
 		Peer: t.lndHarness.Alice.PubKey[:],
-		Type: rfqmsg.MsgTypeQuoteRequest,
+		Type: rfqmsg.MsgTypeRequest,
 		Data: quoteReqBytes,
 	})
 

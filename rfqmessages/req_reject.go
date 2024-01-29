@@ -97,7 +97,7 @@ func (q *QuoteReject) ToWire() (WireMessage, error) {
 
 	return WireMessage{
 		Peer:    q.Peer,
-		MsgType: MsgTypeQuoteReject,
+		MsgType: MsgTypeReject,
 		Data:    msgDataBytes,
 	}, nil
 }

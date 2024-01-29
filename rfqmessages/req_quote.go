@@ -279,7 +279,7 @@ func (q *QuoteRequest) ToWire() (WireMessage, error) {
 
 	return WireMessage{
 		Peer:    q.Peer,
-		MsgType: MsgTypeQuoteRequest,
+		MsgType: MsgTypeRequest,
 		Data:    msgDataBytes,
 	}, nil
 }

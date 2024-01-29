@@ -182,7 +182,7 @@ func (q *QuoteAccept) ToWire() (WireMessage, error) {
 
 	return WireMessage{
 		Peer:    q.Peer,
-		MsgType: MsgTypeQuoteAccept,
+		MsgType: MsgTypeAccept,
 		Data:    msgDataBytes,
 	}, nil
 }

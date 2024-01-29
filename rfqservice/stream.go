@@ -139,21 +139,21 @@ func (h *StreamHandler) handleIncomingRawMessage(
 	}
 
 	switch rawMsg.MsgType {
-	case msg.MsgTypeQuoteRequest:
+	case msg.MsgTypeRequest:
 		err := h.handleIncomingQuoteRequest(wireMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"request message: %w", err)
 		}
 
-	case msg.MsgTypeQuoteAccept:
+	case msg.MsgTypeAccept:
 		err := h.handleIncomingQuoteAccept(wireMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
 				"accept message: %w", err)
 		}
 
-	case msg.MsgTypeQuoteReject:
+	case msg.MsgTypeReject:
 		err := h.handleIncomingQuoteReject(wireMsg)
 		if err != nil {
 			return fmt.Errorf("unable to handle incoming quote "+
