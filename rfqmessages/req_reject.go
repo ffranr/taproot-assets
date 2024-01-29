@@ -10,13 +10,13 @@ import (
 )
 
 const (
-	// QuoteRejectMsgData field TLV types.
+	// TypeRejectData field TLV types.
 
-	QuoteRejectMsgDataIDType tlv.Type = 0
+	TypeRejectDataID tlv.Type = 0
 )
 
-func QuoteRejectMsgDataIDRecord(id *ID) tlv.Record {
-	return tlv.MakePrimitiveRecord(QuoteRejectMsgDataIDType, id)
+func TypeRecordRejectDataID(id *ID) tlv.Record {
+	return tlv.MakePrimitiveRecord(TypeRejectDataID, id)
 }
 
 // QuoteRejectMsgData is a struct that represents the data field of a quote
@@ -30,7 +30,7 @@ type QuoteRejectMsgData struct {
 // runtime.
 func (q *QuoteRejectMsgData) encodeRecords() []tlv.Record {
 	return []tlv.Record{
-		QuoteRejectMsgDataIDRecord(&q.ID),
+		TypeRecordRejectDataID(&q.ID),
 	}
 }
 
@@ -46,7 +46,7 @@ func (q *QuoteRejectMsgData) Encode(writer io.Writer) error {
 // DecodeRecords provides all TLV records for decoding.
 func (q *QuoteRejectMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
-		QuoteRejectMsgDataIDRecord(&q.ID),
+		TypeRecordRejectDataID(&q.ID),
 	}
 }
 

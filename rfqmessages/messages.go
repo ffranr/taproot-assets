@@ -19,15 +19,15 @@ const TapMessageTypeBaseOffset = 20116 + uint32(lnwire.CustomTypeStart)
 const (
 	// MsgTypeQuoteRequest is the message type identifier for a quote
 	// request message.
-	MsgTypeQuoteRequest = TapMessageTypeBaseOffset + 1
+	MsgTypeQuoteRequest = TapMessageTypeBaseOffset + 0
 
 	// MsgTypeQuoteAccept is the message type identifier for a quote
 	// accept message.
-	MsgTypeQuoteAccept = TapMessageTypeBaseOffset + 2
+	MsgTypeQuoteAccept = TapMessageTypeBaseOffset + 1
 
 	// MsgTypeQuoteReject is the message type identifier for a quote
 	// reject message.
-	MsgTypeQuoteReject = TapMessageTypeBaseOffset + 3
+	MsgTypeQuoteReject = TapMessageTypeBaseOffset + 2
 )
 
 // WireMessage is a struct that represents a general wire message.

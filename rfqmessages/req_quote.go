@@ -13,25 +13,25 @@ import (
 )
 
 const (
-	// QuoteRequestMsgData field TLV types.
+	// TypeRequestData field TLV types.
 
-	QuoteRequestMsgDataIDType                tlv.Type = 0
-	QuoteRequestMsgDataAssetIDType           tlv.Type = 1
-	QuoteRequestMsgDataGroupKeyType          tlv.Type = 3
-	QuoteRequestMsgDataAssetAmountType       tlv.Type = 4
-	QuoteRequestMsgDataAmtCharacteristicType tlv.Type = 6
+	TypeRequestDataID                tlv.Type = 0
+	TypeRequestDataAssetID           tlv.Type = 1
+	TypeRequestDataGroupKey          tlv.Type = 3
+	TypeRequestDataAssetAmount       tlv.Type = 4
+	TypeRequestDataAmtCharacteristic tlv.Type = 6
 )
 
-func QuoteRequestMsgDataIDRecord(id *ID) tlv.Record {
+func TypeRecordRequestDataID(id *ID) tlv.Record {
 	idBytes := (*[32]byte)(id)
-	return tlv.MakePrimitiveRecord(QuoteRequestMsgDataIDType, idBytes)
+	return tlv.MakePrimitiveRecord(TypeRequestDataID, idBytes)
 }
 
-func QuoteRequestMsgDataAssetIDRecord(assetID **asset.ID) tlv.Record {
+func TypeRecordRequestDataAssetID(assetID **asset.ID) tlv.Record {
 	const recordSize = sha256.Size
 
 	return tlv.MakeStaticRecord(
-		QuoteRequestMsgDataAssetIDType, assetID, recordSize,
+		TypeRequestDataAssetID, assetID, recordSize,
 		IDEncoder, IDDecoder,
 	)
 }
@@ -66,22 +66,22 @@ func IDDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
 	return tlv.NewTypeForDecodingErr(val, "AssetID", l, sha256.Size)
 }
 
-func QuoteRequestMsgDataGroupKeyRecord(groupKey **btcec.PublicKey) tlv.Record {
+func TypeRecordRequestDataGroupKey(groupKey **btcec.PublicKey) tlv.Record {
 	const recordSize = btcec.PubKeyBytesLenCompressed
 
 	return tlv.MakeStaticRecord(
-		QuoteRequestMsgDataGroupKeyType, groupKey, recordSize,
+		TypeRequestDataGroupKey, groupKey, recordSize,
 		asset.CompressedPubKeyEncoder, asset.CompressedPubKeyDecoder,
 	)
 }
 
-func QuoteRequestMsgDataAssetAmountRecord(assetAmount *uint64) tlv.Record {
-	return tlv.MakePrimitiveRecord(QuoteRequestMsgDataAssetAmountType, assetAmount)
+func TypeRecordRequestDataAssetAmount(assetAmount *uint64) tlv.Record {
+	return tlv.MakePrimitiveRecord(TypeRequestDataAssetAmount, assetAmount)
 }
 
-func QuoteRequestMsgDataAmtCharacteristicRecord(amtCharacteristic *uint64) tlv.Record {
+func TypeRecordRequestDataAmtCharacteristic(amtCharacteristic *uint64) tlv.Record {
 	return tlv.MakePrimitiveRecord(
-		QuoteRequestMsgDataAmtCharacteristicType, amtCharacteristic,
+		TypeRequestDataAmtCharacteristic, amtCharacteristic,
 	)
 }
 
@@ -169,20 +169,20 @@ func (q *QuoteRequestMsgData) Validate() error {
 func (q *QuoteRequestMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
-	records = append(records, QuoteRequestMsgDataIDRecord(&q.ID))
+	records = append(records, TypeRecordRequestDataID(&q.ID))
 
 	if q.AssetID != nil {
-		records = append(records, QuoteRequestMsgDataAssetIDRecord(&q.AssetID))
+		records = append(records, TypeRecordRequestDataAssetID(&q.AssetID))
 	}
 
 	if q.AssetGroupKey != nil {
-		record := QuoteRequestMsgDataGroupKeyRecord(&q.AssetGroupKey)
+		record := TypeRecordRequestDataGroupKey(&q.AssetGroupKey)
 		records = append(records, record)
 	}
 
-	records = append(records, QuoteRequestMsgDataAssetAmountRecord(&q.AssetAmount))
+	records = append(records, TypeRecordRequestDataAssetAmount(&q.AssetAmount))
 
-	record := QuoteRequestMsgDataAmtCharacteristicRecord(&q.AmtCharacteristic)
+	record := TypeRecordRequestDataAmtCharacteristic(&q.AmtCharacteristic)
 	records = append(records, record)
 
 	return records
@@ -211,11 +211,11 @@ func (q *QuoteRequestMsgData) Bytes() ([]byte, error) {
 // DecodeRecords provides all TLV records for decoding.
 func (q *QuoteRequestMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
-		QuoteRequestMsgDataIDRecord(&q.ID),
-		QuoteRequestMsgDataAssetIDRecord(&q.AssetID),
-		QuoteRequestMsgDataGroupKeyRecord(&q.AssetGroupKey),
-		QuoteRequestMsgDataAssetAmountRecord(&q.AssetAmount),
-		QuoteRequestMsgDataAmtCharacteristicRecord(&q.AmtCharacteristic),
+		TypeRecordRequestDataID(&q.ID),
+		TypeRecordRequestDataAssetID(&q.AssetID),
+		TypeRecordRequestDataGroupKey(&q.AssetGroupKey),
+		TypeRecordRequestDataAssetAmount(&q.AssetAmount),
+		TypeRecordRequestDataAmtCharacteristic(&q.AmtCharacteristic),
 	}
 }
 

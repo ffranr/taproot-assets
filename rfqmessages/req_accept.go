@@ -10,33 +10,33 @@ import (
 )
 
 const (
-	// QuoteAcceptMsgData field TLV types.
+	// TypeAcceptData field TLV types.
 
-	QuoteAcceptMsgDataIDType             tlv.Type = 0
-	QuoteAcceptMsgDataCharacteristicType tlv.Type = 2
-	QuoteAcceptMsgDataExpiryType         tlv.Type = 4
-	QuoteAcceptMsgDataSignatureType      tlv.Type = 6
+	TypeAcceptDataID             tlv.Type = 0
+	TypeAcceptDataCharacteristic tlv.Type = 2
+	TypeAcceptDataExpiry         tlv.Type = 4
+	TypeAcceptDataSignature      tlv.Type = 6
 )
 
-func QuoteAcceptMsgDataIDRecord(id *ID) tlv.Record {
-	return tlv.MakePrimitiveRecord(QuoteAcceptMsgDataIDType, id)
+func TypeRecordAcceptDataID(id *ID) tlv.Record {
+	return tlv.MakePrimitiveRecord(TypeAcceptDataID, id)
 }
 
-func QuoteAcceptMsgDataCharacteristicRecord(characteristic *uint64) tlv.Record {
+func TypeRecordAcceptDataCharacteristic(characteristic *uint64) tlv.Record {
 	return tlv.MakePrimitiveRecord(
-		QuoteAcceptMsgDataCharacteristicType, characteristic,
+		TypeAcceptDataCharacteristic, characteristic,
 	)
 }
 
-func QuoteAcceptMsgDataExpiryRecord(expirySeconds *uint64) tlv.Record {
+func TypeRecordAcceptDataExpiry(expirySeconds *uint64) tlv.Record {
 	return tlv.MakePrimitiveRecord(
-		QuoteAcceptMsgDataExpiryType, expirySeconds,
+		TypeAcceptDataExpiry, expirySeconds,
 	)
 }
 
-func QuoteAcceptMsgDataSig(sig *[64]byte) tlv.Record {
+func TypeRecordAcceptDataSig(sig *[64]byte) tlv.Record {
 	return tlv.MakePrimitiveRecord(
-		QuoteAcceptMsgDataSignatureType, sig,
+		TypeAcceptDataSignature, sig,
 	)
 }
 
@@ -95,22 +95,22 @@ func (q *QuoteAcceptMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
 	// Add ID record.
-	records = append(records, QuoteAcceptMsgDataIDRecord(&q.ID))
+	records = append(records, TypeRecordAcceptDataID(&q.ID))
 
 	// Add characteristic record.
-	record := QuoteAcceptMsgDataCharacteristicRecord(
+	record := TypeRecordAcceptDataCharacteristic(
 		&q.AmtCharacteristic,
 	)
 	records = append(records, record)
 
 	// Add expiry record.
 	records = append(
-		records, QuoteAcceptMsgDataExpiryRecord(&q.ExpirySeconds),
+		records, TypeRecordAcceptDataExpiry(&q.ExpirySeconds),
 	)
 
 	// Add signature record.
 	records = append(
-		records, QuoteAcceptMsgDataSig(&q.sig),
+		records, TypeRecordAcceptDataSig(&q.sig),
 	)
 
 	return records
@@ -128,10 +128,10 @@ func (q *QuoteAcceptMsgData) Encode(writer io.Writer) error {
 // DecodeRecords provides all TLV records for decoding.
 func (q *QuoteAcceptMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
-		QuoteAcceptMsgDataIDRecord(&q.ID),
-		QuoteAcceptMsgDataCharacteristicRecord(&q.AmtCharacteristic),
-		QuoteAcceptMsgDataExpiryRecord(&q.ExpirySeconds),
-		QuoteAcceptMsgDataSig(&q.sig),
+		TypeRecordAcceptDataID(&q.ID),
+		TypeRecordAcceptDataCharacteristic(&q.AmtCharacteristic),
+		TypeRecordAcceptDataExpiry(&q.ExpirySeconds),
+		TypeRecordAcceptDataSig(&q.sig),
 	}
 }
 
