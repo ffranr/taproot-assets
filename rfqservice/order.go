@@ -10,6 +10,16 @@ import (
 	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
 
+// ChannelRemit is a struct that holds the terms of a channel quote remit.
+type ChannelRemit struct {
+	// AmtCharacteristic is the characteristic of the asset amount that
+	// determines the fee rate.
+	AmtCharacteristic uint64
+
+	// ExpirySeconds is the number of seconds until the quote expires.
+	ExpirySeconds uint64
+}
+
 // OrderHandler orchestrates management of accepted RFQ (Request For Quote)
 // bundles. It monitors HTLCs (Hash Time Locked Contracts), determining
 // acceptance or rejection based on compliance with the terms of the associated
@@ -22,9 +32,12 @@ type OrderHandler struct {
 	// intercept and accept/reject HTLCs.
 	htlcInterceptor HtlcInterceptor
 
-	// acceptedQuotes is a map of serialised short channel IDs (SCIDs)
-	// to associated active accepted quotes.
-	acceptedQuotes map[uint64]msg.QuoteAccept
+	// channelRemits is a map of serialised short channel IDs (SCIDs) to
+	// associated active channel quote remits.
+	channelRemits map[msg.SerialisedScid]ChannelRemit
+
+	// channelRemitsMtx guards the channelRemits map.
+	channelRemitsMtx sync.Mutex
 
 	// ErrChan is the handle's error reporting channel.
 	ErrChan <-chan error
@@ -40,7 +53,7 @@ func NewOrderHandler(htlcInterceptor HtlcInterceptor) (*OrderHandler, error) {
 		ErrChan: make(<-chan error),
 
 		htlcInterceptor: htlcInterceptor,
-		acceptedQuotes:  make(map[uint64]msg.QuoteAccept),
+		channelRemits:   make(map[msg.SerialisedScid]ChannelRemit),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -50,11 +63,22 @@ func NewOrderHandler(htlcInterceptor HtlcInterceptor) (*OrderHandler, error) {
 }
 
 // handleIncomingHtlc handles an incoming HTLC.
-func (h *OrderHandler) handleIncomingHtlc(ctx context.Context,
+func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 	htlc lndclient.InterceptedHtlc) (*lndclient.InterceptedHtlcResponse,
 	error) {
 
-	scid := htlc.OutgoingChannelID.ToUint64()
+	scid := msg.SerialisedScid(htlc.OutgoingChannelID.ToUint64())
+	channelRemit, ok := h.FetchChannelRemit(scid)
+
+	if !ok {
+		return &lndclient.InterceptedHtlcResponse{
+			Action: lndclient.InterceptorActionFail,
+		}, nil
+	}
+
+	// TODO(ffranr): Check that the HTLC amount is within the bounds of the
+	// channel remit's amt characteristic.
+	channelRemit = channelRemit
 
 	return nil, nil
 }
@@ -120,15 +144,35 @@ func (h *OrderHandler) Start() error {
 	return startErr
 }
 
-// RegisterQuoteAccept registers a quote accept remit.
-func (h *OrderHandler) RegisterQuoteAccept(quoteAccept msg.QuoteAccept) {
+// RegisterChannelRemit registers a channel management remit. If a remit exists
+// for the channel, it is overwritten.
+func (h *OrderHandler) RegisterChannelRemit(quoteAccept msg.QuoteAccept) {
 	// Add quote accept to the accepted quotes map.
 	scid := quoteAccept.ShortChannelId()
-	h.acceptedQuotes[scid] = quoteAccept
+
+	h.channelRemitsMtx.Lock()
+	defer h.channelRemitsMtx.Unlock()
+
+	h.channelRemits[scid] = ChannelRemit{
+		AmtCharacteristic: quoteAccept.AmtCharacteristic,
+		ExpirySeconds:     quoteAccept.ExpirySeconds,
+	}
 }
 
-func (h *OrderHandler) FetchQuoteAccept(scid uint64) {
+// FetchChannelRemit fetches a channel remit given a serialised SCID. If a
+// channel remit is not found, false is returned.
+func (h *OrderHandler) FetchChannelRemit(
+	scid msg.SerialisedScid) (*ChannelRemit, bool) {
 
+	h.channelRemitsMtx.Lock()
+	defer h.channelRemitsMtx.Unlock()
+
+	remit, ok := h.channelRemits[scid]
+	if !ok {
+		return nil, false
+	}
+
+	return &remit, true
 }
 
 // Stop stops the handler.

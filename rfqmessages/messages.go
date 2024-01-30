@@ -8,6 +8,7 @@ import (
 // ID is the identifier for a RFQ message.
 type ID [32]byte
 
+// SerialisedScid is a serialised short channel id (SCID).
 type SerialisedScid uint64
 
 // TapMessageTypeBaseOffset is the taproot-assets specific message type

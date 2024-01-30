@@ -180,13 +180,16 @@ func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*QuoteAccept, error) {
 }
 
 // ShortChannelId returns the short channel ID of the quote accept.
-func (q *QuoteAccept) ShortChannelId() uint64 {
+func (q *QuoteAccept) ShortChannelId() SerialisedScid {
 	// Given valid RFQ message ID, we then define a RFQ short chain ID
 	// (SCID) by taking the last 8 bytes of the RFQ message ID and
 	// interpreting them as a 64-bit integer.
 	scidBytes := q.ID[24:]
 
-	return binary.BigEndian.Uint64(scidBytes)
+	// TODO(ffranr): Am I doing this right?
+	scidInteger := binary.BigEndian.Uint64(scidBytes)
+
+	return SerialisedScid(scidInteger)
 }
 
 // ToWire returns a wire message with a serialized data field.
