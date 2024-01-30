@@ -13,6 +13,10 @@ import (
 const (
 	// DefaultTimeout is the default timeout used for context operations.
 	DefaultTimeout = 30 * time.Second
+
+	// CacheCleanupInterval is the interval at which local runtime caches
+	// are cleaned up.
+	CacheCleanupInterval = 30 * time.Second
 )
 
 // ManagerCfg is a struct that holds the configuration parameters for the RFQ
@@ -121,7 +125,10 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	var err error
 
 	// Initialise and start the order handler.
-	m.orderHandler, err = NewOrderHandler(m.cfg.HtlcInterceptor)
+	m.orderHandler, err = NewOrderHandler(OrderHandlerCfg{
+		CleanupInterval: CacheCleanupInterval,
+		HtlcInterceptor: m.cfg.HtlcInterceptor,
+	})
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ order handler: %w",
 			err)
