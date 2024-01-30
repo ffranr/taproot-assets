@@ -333,6 +333,7 @@ func genServerConfig(cfg *Config, cfgLogger btclog.Logger,
 	rfqManager, err := rfqservice.NewManager(
 		rfqservice.ManagerCfg{
 			PeerMessagePorter: chainBridge,
+			HtlcInterceptor:   chainBridge,
 		},
 	)
 	if err != nil {

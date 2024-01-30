@@ -22,6 +22,10 @@ type ManagerCfg struct {
 	// provides the RFQ manager with the ability to send and receive raw
 	// peer messages.
 	PeerMessagePorter PeerMessagePorter
+
+	// HtlcInterceptor is the HTLC interceptor. This component is used to
+	// intercept and accept/reject HTLCs.
+	HtlcInterceptor HtlcInterceptor
 }
 
 // Manager is a struct that handles the request for quote (RFQ) system.
@@ -32,9 +36,14 @@ type Manager struct {
 	// cfg holds the configuration parameters for the RFQ manager.
 	cfg ManagerCfg
 
-	// rfqStreamHandle is the RFQ stream handler. This subsystem handles
+	// orderHandler is the RFQ order handler. This subsystem monitors HTLCs
+	// (Hash Time Locked Contracts), determining acceptance or rejection
+	// based on compliance with the terms of any associated quote.
+	orderHandler *OrderHandler
+
+	// streamHandler is the RFQ stream handler. This subsystem handles
 	// incoming and outgoing peer RFQ stream messages.
-	rfqStreamHandle *StreamHandler
+	streamHandler *StreamHandler
 
 	// negotiator is the RFQ quote negotiator. This subsystem determines
 	// whether a quote is accepted or rejected.
@@ -111,18 +120,29 @@ func (m *Manager) Stop() error {
 func (m *Manager) startSubsystems(ctx context.Context) error {
 	var err error
 
+	// Initialise and start the order handler.
+	m.orderHandler, err = NewOrderHandler(m.cfg.HtlcInterceptor)
+	if err != nil {
+		return fmt.Errorf("error initializing RFQ order handler: %w",
+			err)
+	}
+
+	if err := m.orderHandler.Start(); err != nil {
+		return fmt.Errorf("unable to start RFQ order handler: %w", err)
+	}
+
 	// Initialise and start the peer message stream handler.
-	m.rfqStreamHandle, err = NewStreamHandler(
+	m.streamHandler, err = NewStreamHandler(
 		ctx, m.cfg.PeerMessagePorter,
 	)
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ subsystem service: "+
-			"peer message stream handler: %v", err)
+			"peer message stream handler: %w", err)
 	}
 
-	if err := m.rfqStreamHandle.Start(); err != nil {
+	if err := m.streamHandler.Start(); err != nil {
 		return fmt.Errorf("unable to start RFQ subsystem service: "+
-			"peer message stream handler: %v", err)
+			"peer message stream handler: %w", err)
 	}
 
 	// Initialise and start the quote negotiator.
@@ -133,7 +153,7 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	}
 
 	if err := m.negotiator.Start(); err != nil {
-		return fmt.Errorf("unable to start RFQ negotiator: %v", err)
+		return fmt.Errorf("unable to start RFQ negotiator: %w", err)
 	}
 
 	return err
@@ -142,7 +162,7 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 // stopSubsystems stops the RFQ subsystems.
 func (m *Manager) stopSubsystems() error {
 	// Stop the RFQ stream handler.
-	err := m.rfqStreamHandle.Stop()
+	err := m.streamHandler.Stop()
 	if err != nil {
 		return fmt.Errorf("error stopping RFQ stream handler: %w", err)
 	}
@@ -176,7 +196,7 @@ func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
 	//  accepted.
 
 	// Send the quote accept message to the peer.
-	err := m.rfqStreamHandle.HandleOutgoingMessage(&quoteAccept)
+	err := m.streamHandler.HandleOutgoingMessage(&quoteAccept)
 	if err != nil {
 		return fmt.Errorf("error handling outgoing quote accept: %w",
 			err)
@@ -188,9 +208,9 @@ func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
 // mainEventLoop is the main event loop of the RFQ manager.
 func (m *Manager) mainEventLoop() {
 	// Incoming message channels.
-	incomingQuoteRequests := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
-	//incomingQuoteAccept := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
-	//incomingQuoteReject := m.rfqStreamHandle.IncomingQuoteRequests.NewItemCreated
+	incomingQuoteRequests := m.streamHandler.IncomingQuoteRequests.NewItemCreated
+	//incomingQuoteAccept := m.streamHandler.IncomingQuoteRequests.NewItemCreated
+	//incomingQuoteReject := m.streamHandler.IncomingQuoteRequests.NewItemCreated
 
 	// Outgoing message channels.
 	//outgoingQuoteRequest := m.negotiator.AcceptedQuotes.NewItemCreated

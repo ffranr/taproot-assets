@@ -75,7 +75,7 @@ func (h *Negotiator) mainEventLoop() {
 	}
 }
 
-// Start starts the event handler.
+// Start starts the service.
 func (h *Negotiator) Start() error {
 	log.Info("Starting RFQ subsystem: negotiator")
 

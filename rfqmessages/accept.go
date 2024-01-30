@@ -40,9 +40,9 @@ func TypeRecordAcceptDataSig(sig *[64]byte) tlv.Record {
 	)
 }
 
-// QuoteAcceptMsgData is a struct that represents the data field of a quote
+// AcceptMsgData is a struct that represents the data field of a quote
 // accept message.
-type QuoteAcceptMsgData struct {
+type AcceptMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
@@ -57,7 +57,7 @@ type QuoteAcceptMsgData struct {
 	sig [64]byte
 }
 
-//func NewQuoteAcceptMsgData(q *QuoteAccept) (*QuoteAcceptMsgData, error) {
+//func NewQuoteAcceptMsgData(q *QuoteAccept) (*AcceptMsgData, error) {
 //	// Hash the fields of the message data so that we can create a signature
 //	// over the message.
 //	h := sha256.New()
@@ -81,7 +81,7 @@ type QuoteAcceptMsgData struct {
 //	//fieldsHash := h.Sum(nil)
 //	//sig
 //
-//	return &QuoteAcceptMsgData{
+//	return &AcceptMsgData{
 //		ID:                q.ID,
 //		AmtCharacteristic: q.AmtCharacteristic,
 //		ExpirySeconds:     q.ExpirySeconds,
@@ -91,7 +91,7 @@ type QuoteAcceptMsgData struct {
 
 // EncodeRecords determines the non-nil records to include when encoding at
 // runtime.
-func (q *QuoteAcceptMsgData) encodeRecords() []tlv.Record {
+func (q *AcceptMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
 	// Add ID record.
@@ -117,7 +117,7 @@ func (q *QuoteAcceptMsgData) encodeRecords() []tlv.Record {
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *QuoteAcceptMsgData) Encode(writer io.Writer) error {
+func (q *AcceptMsgData) Encode(writer io.Writer) error {
 	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (q *QuoteAcceptMsgData) Encode(writer io.Writer) error {
 }
 
 // DecodeRecords provides all TLV records for decoding.
-func (q *QuoteAcceptMsgData) decodeRecords() []tlv.Record {
+func (q *AcceptMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordAcceptDataID(&q.ID),
 		TypeRecordAcceptDataCharacteristic(&q.AmtCharacteristic),
@@ -136,7 +136,7 @@ func (q *QuoteAcceptMsgData) decodeRecords() []tlv.Record {
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *QuoteAcceptMsgData) Decode(r io.Reader) error {
+func (q *AcceptMsgData) Decode(r io.Reader) error {
 	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
@@ -149,14 +149,14 @@ type QuoteAccept struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// QuoteAcceptMsgData is the message data for the quote accept message.
-	QuoteAcceptMsgData
+	// AcceptMsgData is the message data for the quote accept message.
+	AcceptMsgData
 }
 
 // NewQuoteAcceptFromWireMsg instantiates a new instance from a wire message.
 func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*QuoteAccept, error) {
 	// Decode message data component from TLV bytes.
-	var msgData QuoteAcceptMsgData
+	var msgData AcceptMsgData
 	err := msgData.Decode(bytes.NewReader(wireMsg.Data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote accept "+
@@ -164,8 +164,8 @@ func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*QuoteAccept, error) {
 	}
 
 	return &QuoteAccept{
-		Peer:               wireMsg.Peer,
-		QuoteAcceptMsgData: msgData,
+		Peer:          wireMsg.Peer,
+		AcceptMsgData: msgData,
 	}, nil
 }
 
@@ -173,7 +173,7 @@ func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*QuoteAccept, error) {
 func (q *QuoteAccept) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
-	err := q.QuoteAcceptMsgData.Encode(buff)
+	err := q.AcceptMsgData.Encode(buff)
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)

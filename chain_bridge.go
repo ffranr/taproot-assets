@@ -222,6 +222,15 @@ func (l *LndRpcChainBridge) SendCustomMessage(ctx context.Context,
 	return l.lnd.Client.SendCustomMessage(ctx, msg)
 }
 
+// InterceptHtlcs intercepts all incoming HTLCs and calls the given handler
+// function with the HTLC details. The handler function can then decide whether
+// to accept or reject the HTLC.
+func (l *LndRpcChainBridge) InterceptHtlcs(
+	ctx context.Context, handler lndclient.HtlcInterceptHandler) error {
+
+	return l.lnd.Router.InterceptHtlcs(ctx, handler)
+}
+
 // A compile time assertion to ensure LndRpcChainBridge meets the
 // tapgarden.ChainBridge interface.
 var _ tapgarden.ChainBridge = (*LndRpcChainBridge)(nil)
