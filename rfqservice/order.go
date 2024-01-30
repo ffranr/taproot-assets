@@ -7,6 +7,7 @@ import (
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
+	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
 
 // OrderHandler orchestrates management of accepted RFQ (Request For Quote)
@@ -20,6 +21,10 @@ type OrderHandler struct {
 	// HtlcInterceptor is the HTLC interceptor. This component is used to
 	// intercept and accept/reject HTLCs.
 	htlcInterceptor HtlcInterceptor
+
+	// acceptedQuotes is a map of serialised short channel IDs (SCIDs)
+	// to associated active accepted quotes.
+	acceptedQuotes map[uint64]msg.QuoteAccept
 
 	// ErrChan is the handle's error reporting channel.
 	ErrChan <-chan error
@@ -35,6 +40,7 @@ func NewOrderHandler(htlcInterceptor HtlcInterceptor) (*OrderHandler, error) {
 		ErrChan: make(<-chan error),
 
 		htlcInterceptor: htlcInterceptor,
+		acceptedQuotes:  make(map[uint64]msg.QuoteAccept),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -47,6 +53,8 @@ func NewOrderHandler(htlcInterceptor HtlcInterceptor) (*OrderHandler, error) {
 func (h *OrderHandler) handleIncomingHtlc(ctx context.Context,
 	htlc lndclient.InterceptedHtlc) (*lndclient.InterceptedHtlcResponse,
 	error) {
+
+	scid := htlc.OutgoingChannelID.ToUint64()
 
 	return nil, nil
 }
@@ -69,6 +77,8 @@ func (h *OrderHandler) mainEventLoop() {
 
 	for {
 		select {
+
+		// TODO(ffranr): Periodically clean up expired accepted quotes.
 
 		// TODO(ffranr): Listen for HTLCs. Determine whether they are
 		//  accepted or rejected based on compliance with the terms of
@@ -108,6 +118,17 @@ func (h *OrderHandler) Start() error {
 	})
 
 	return startErr
+}
+
+// RegisterQuoteAccept registers a quote accept remit.
+func (h *OrderHandler) RegisterQuoteAccept(quoteAccept msg.QuoteAccept) {
+	// Add quote accept to the accepted quotes map.
+	scid := quoteAccept.ShortChannelId()
+	h.acceptedQuotes[scid] = quoteAccept
+}
+
+func (h *OrderHandler) FetchQuoteAccept(scid uint64) {
+
 }
 
 // Stop stops the handler.

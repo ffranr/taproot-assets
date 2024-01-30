@@ -45,6 +45,9 @@ type StreamHandler struct {
 }
 
 // NewStreamHandler creates and starts a new RFQ stream handler.
+//
+// TODO(ffranr): Pass in a signer so that we can create a signature over output
+// message fields.
 func NewStreamHandler(ctx context.Context,
 	peerMsgPorter PeerMessagePorter) (*StreamHandler, error) {
 

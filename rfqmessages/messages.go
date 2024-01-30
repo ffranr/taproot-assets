@@ -8,6 +8,8 @@ import (
 // ID is the identifier for a RFQ message.
 type ID [32]byte
 
+type SerialisedScid uint64
+
 // TapMessageTypeBaseOffset is the taproot-assets specific message type
 // identifier base offset. All tap messages will have a type identifier that is
 // greater than this value.

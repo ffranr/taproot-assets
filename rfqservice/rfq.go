@@ -192,8 +192,8 @@ func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
 
 // handleOutgoingQuoteAccept handles an outgoing quote accept message.
 func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
-	// TODO(ffranr): Inform the order manager that the quote has been
-	//  accepted.
+	// Inform the HTLC order handler that the quote has been accepted.
+	m.orderHandler.RegisterQuoteAccept(quoteAccept)
 
 	// Send the quote accept message to the peer.
 	err := m.streamHandler.HandleOutgoingMessage(&quoteAccept)

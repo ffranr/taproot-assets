@@ -2,6 +2,7 @@ package rfqmessages
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -48,6 +49,15 @@ type AcceptMsgData struct {
 
 	// AmtCharacteristic is the characteristic of the asset amount that
 	// determines the fee rate.
+	//
+	//suggested_rate_tick is the internal unit used for asset conversions.
+	//	A tick is 1/10000th of a currency unit. It gives us up to 4
+	//decimal places of precision (0.0001 or 0.01% or 1 bps). As an example,
+	//if the BTC/USD rate was $61,234.95, then we multiply that by 10,000 to
+	//arrive at the usd_rate_tick: $61,234.95 * 10000 = 612,349,500. To
+	//convert back to our normal rate, we decide by 10,000 to arrive back at
+	//$61,234.95.
+	//
 	AmtCharacteristic uint64
 
 	// ExpirySeconds is the number of seconds until the quote expires.
@@ -169,7 +179,20 @@ func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*QuoteAccept, error) {
 	}, nil
 }
 
+// ShortChannelId returns the short channel ID of the quote accept.
+func (q *QuoteAccept) ShortChannelId() uint64 {
+	// Given valid RFQ message ID, we then define a RFQ short chain ID
+	// (SCID) by taking the last 8 bytes of the RFQ message ID and
+	// interpreting them as a 64-bit integer.
+	scidBytes := q.ID[24:]
+
+	return binary.BigEndian.Uint64(scidBytes)
+}
+
 // ToWire returns a wire message with a serialized data field.
+//
+// TODO(ffranr): This method should accept a signer so that we can generate a
+// signature over the message data.
 func (q *QuoteAccept) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
