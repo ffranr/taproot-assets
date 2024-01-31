@@ -3,22 +3,141 @@ package rfqservice
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
 	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	"github.com/lightningnetwork/lnd/lnwire"
 )
 
-// ChannelRemit is a struct that holds the terms of a channel quote remit.
-type ChannelRemit struct {
-	// AmtCharacteristic is the characteristic of the asset amount that
-	// determines the fee rate.
-	AmtCharacteristic uint64
+// SerialisedScid is a serialised short channel id (SCID).
+type SerialisedScid uint64
 
-	// ExpirySeconds is the number of seconds until the quote expires.
+const (
+	// defaultExchangeRateScalingExponent is the default exchange rate
+	// base 10 scaling exponent used to scale the exchange rate.
+	defaultExchangeRateScalingExponent = 4
+)
+
+// calcMillisatsFromAssetAmt calculates the corresponding number of
+// millisatoshis given a tap asset amount, scaled exchange rate, and exchange
+// rate scaling exponent.
+func calcMillisatsFromAssetAmt(assetAmount, scaledExchangeRate,
+	exchangeRateScalingExponent uint64) (lnwire.MilliSatoshi, error) {
+
+	// Check for potential overflow in multiplication maxUint64 divided by
+	// 100,000,000 (satoshis in BTC) and then divided by 1,000
+	// (millisatoshis in satoshi).
+	maxUint64 := uint64(math.MaxUint64)
+	maxAssetAmount := maxUint64 / 100000000 / 1000
+
+	if assetAmount > maxAssetAmount {
+		return 0, fmt.Errorf("asset amount too large to avoid overflow")
+	}
+
+	// Convert asset amount to millisatoshis at 1:1 rate.
+	millisats := assetAmount * 100000000 * 1000
+
+	// Adjust for the actual exchange rate.
+	millisats /= scaledExchangeRate
+
+	// Adjust for scaling exponent.
+	for i := uint64(0); i < exchangeRateScalingExponent; i++ {
+		if millisats > maxUint64/10 {
+			return 0, fmt.Errorf("scaling exponent too large to " +
+				"avoid overflow")
+		}
+		millisats *= 10
+	}
+
+	return lnwire.MilliSatoshi(millisats), nil
+}
+
+// ChannelRemit is a struct that holds the terms which determine whether a
+// channel HTLC is accepted or rejected.
+type ChannelRemit struct {
+	// Scid is the serialised short channel ID (SCID) of the channel for
+	// which the remit applies.
+	Scid SerialisedScid
+
+	// AssetAmount is the amount of the tap asset that is being requested.
+	AssetAmount uint64
+
+	// ScaledExchangeRate is the scaled BTC to tap asset exchange rate.
+	// This value is scaled by the ExchangeRateScalingExponent with base 10
+	// to allow integer representation of the exchange rate.
+	ScaledExchangeRate uint64
+
+	// ExchangeRateScalingExponent is the exponent (base 10 ) used to scale
+	// the exchange rate.
+	ExchangeRateScalingExponent uint8
+
+	// MinimumMillisats is the minimum number of millisatoshis that must be
+	// sent in the HTLC.
+	MinimumMillisats lnwire.MilliSatoshi
+
+	// ExpirySeconds is the number of seconds until the remit expires.
 	ExpirySeconds uint64
+}
+
+// NewChannelRemit creates a new channel remit.
+func NewChannelRemit(assetAmount uint64,
+	quoteAccept msg.QuoteAccept) (*ChannelRemit, error) {
+
+	// Calculate the minimum number of millisatoshis that must be sent in
+	// the HTLC.
+	minimumMillisats, err := calcMillisatsFromAssetAmt(
+		assetAmount, quoteAccept.AmtCharacteristic,
+		defaultExchangeRateScalingExponent,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to calculate channel remit "+
+			"minimum millisats: %w", err)
+	}
+
+	// Compute the serialised short channel ID (SCID) for the channel.
+	scid := SerialisedScid(quoteAccept.ShortChannelId())
+
+	return &ChannelRemit{
+		Scid:                        scid,
+		AssetAmount:                 assetAmount,
+		ScaledExchangeRate:          quoteAccept.AmtCharacteristic,
+		ExchangeRateScalingExponent: defaultExchangeRateScalingExponent,
+		MinimumMillisats:            minimumMillisats,
+		ExpirySeconds:               quoteAccept.ExpirySeconds,
+	}, nil
+}
+
+// CheckHtlcCompliance returns an error if the given HTLC intercept descriptor
+// does not satisfy the subject channel remit.
+func (c *ChannelRemit) CheckHtlcCompliance(
+	htlc lndclient.InterceptedHtlc) error {
+
+	// Check that the HTLC amount is at least the minimum acceptable amount.
+	if htlc.AmountOutMsat <= c.MinimumMillisats {
+		return fmt.Errorf("htlc out amount is less than the remit's "+
+			"minimum (htlc_out_msat=%d, remit_min_msat=%d)",
+			htlc.AmountOutMsat, c.MinimumMillisats)
+	}
+
+	// Check that the channel SCID is as expected.
+	htlcScid := SerialisedScid(htlc.OutgoingChannelID.ToUint64())
+	if htlcScid != c.Scid {
+		return fmt.Errorf("htlc outgoing channel ID does not match "+
+			"remit's SCID (htlc_scid=%d, remit_scid=%d)", htlcScid,
+			c.Scid)
+	}
+
+	// Lastly, check to ensure that the channel remit has not expired.
+	if time.Now().Unix() > int64(c.ExpirySeconds) {
+		return fmt.Errorf("channel remit has expired (expiry=%d)",
+			c.ExpirySeconds)
+	}
+
+	return nil
 }
 
 // OrderHandlerCfg is a struct that holds the configuration parameters for the
@@ -46,7 +165,7 @@ type OrderHandler struct {
 
 	// channelRemits is a map of serialised short channel IDs (SCIDs) to
 	// associated active channel quote remits.
-	channelRemits map[msg.SerialisedScid]ChannelRemit
+	channelRemits map[SerialisedScid]ChannelRemit
 
 	// channelRemitsMtx guards the channelRemits map.
 	channelRemitsMtx sync.Mutex
@@ -60,7 +179,7 @@ type OrderHandler struct {
 func NewOrderHandler(cfg OrderHandlerCfg) (*OrderHandler, error) {
 	return &OrderHandler{
 		cfg:           cfg,
-		channelRemits: make(map[msg.SerialisedScid]ChannelRemit),
+		channelRemits: make(map[SerialisedScid]ChannelRemit),
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
 			Quit:           make(chan struct{}),
@@ -75,9 +194,14 @@ func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 	htlc lndclient.InterceptedHtlc) (*lndclient.InterceptedHtlcResponse,
 	error) {
 
-	scid := msg.SerialisedScid(htlc.OutgoingChannelID.ToUint64())
+	// TODO(ffranr): I think we need a way to silently dismiss HTLCs that
+	//  are not associated with tap.
+
+	scid := SerialisedScid(htlc.OutgoingChannelID.ToUint64())
 	channelRemit, ok := h.FetchChannelRemit(scid)
 
+	// If a channel remit does not exist for the channel SCID, we reject the
+	// HTLC.
 	if !ok {
 		return &lndclient.InterceptedHtlcResponse{
 			Action: lndclient.InterceptorActionFail,
@@ -85,12 +209,17 @@ func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 	}
 
 	// At this point, we know that the channel remit exists and has not
-	// expired. We can now check that the HTLC amount is within the bounds
-	// of the channel remit's characteristic.
+	// expired whilst sitting in the local cache. We can now check that the
+	// HTLC complies with the channel remit.
+	err := channelRemit.CheckHtlcCompliance(htlc)
+	if err != nil {
+		log.Warnf("HTLC does not comply with channel remit: %v "+
+			"(htlc=%v, channel_remit=%v)", err, htlc, channelRemit)
 
-	// TODO(ffranr): Check that the HTLC amount is within the bounds of the
-	// channel remit's amt characteristic.
-	channelRemit = channelRemit
+		return &lndclient.InterceptedHtlcResponse{
+			Action: lndclient.InterceptorActionFail,
+		}, nil
+	}
 
 	return nil, nil
 }
@@ -123,15 +252,7 @@ func (h *OrderHandler) mainEventLoop() {
 		case <-cleanupTicker.C:
 			log.Debug("Cleaning up any stale channel remits from " +
 				"the order handler")
-			staleCounter := h.cleanupStaleChannelRemits()
-			if staleCounter > 0 {
-				log.Tracef("Removed %d stale channel remits "+
-					"from the order handler", staleCounter)
-			}
-
-		// TODO(ffranr): Listen for HTLCs. Determine whether they are
-		//  accepted or rejected based on compliance with the terms of
-		//  the any applicable quote.
+			h.cleanupStaleChannelRemits()
 
 		case <-h.Quit:
 			log.Debug("Received quit signal. Stopping negotiator " +
@@ -170,25 +291,28 @@ func (h *OrderHandler) Start() error {
 }
 
 // RegisterChannelRemit registers a channel management remit. If a remit exists
-// for the channel, it is overwritten.
-func (h *OrderHandler) RegisterChannelRemit(quoteAccept msg.QuoteAccept) {
-	// Add quote accept to the accepted quotes map.
-	scid := quoteAccept.ShortChannelId()
+// for the channel SCID, it is overwritten.
+func (h *OrderHandler) RegisterChannelRemit(assetAmount uint64,
+	quoteAccept msg.QuoteAccept) error {
+
+	channelRemit, err := NewChannelRemit(assetAmount, quoteAccept)
+	if err != nil {
+		return fmt.Errorf("unable to create channel remit: %w", err)
+	}
 
 	h.channelRemitsMtx.Lock()
 	defer h.channelRemitsMtx.Unlock()
 
-	h.channelRemits[scid] = ChannelRemit{
-		AmtCharacteristic: quoteAccept.AmtCharacteristic,
-		ExpirySeconds:     quoteAccept.ExpirySeconds,
-	}
+	h.channelRemits[channelRemit.Scid] = *channelRemit
+
+	return nil
 }
 
 // FetchChannelRemit fetches a channel remit given a serialised SCID. If a
 // channel remit is not found, false is returned. Expired channel remits are
 // also not returned and are removed from the cache.
-func (h *OrderHandler) FetchChannelRemit(
-	scid msg.SerialisedScid) (*ChannelRemit, bool) {
+func (h *OrderHandler) FetchChannelRemit(scid SerialisedScid) (*ChannelRemit,
+	bool) {
 
 	h.channelRemitsMtx.Lock()
 	defer h.channelRemitsMtx.Unlock()
@@ -207,8 +331,9 @@ func (h *OrderHandler) FetchChannelRemit(
 	return &remit, true
 }
 
-// cleanupStaleChannelRemits removes any channel remits that have expired.
-func (h *OrderHandler) cleanupStaleChannelRemits() int {
+// cleanupStaleChannelRemits removes expired channel remits from the local
+// cache.
+func (h *OrderHandler) cleanupStaleChannelRemits() {
 	h.channelRemitsMtx.Lock()
 	defer h.channelRemitsMtx.Unlock()
 
@@ -221,7 +346,10 @@ func (h *OrderHandler) cleanupStaleChannelRemits() int {
 		}
 	}
 
-	return staleCounter
+	if staleCounter > 0 {
+		log.Tracef("Removed %d stale channel remits from the order "+
+			"handler", staleCounter)
+	}
 }
 
 // Stop stops the handler.
