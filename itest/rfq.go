@@ -7,6 +7,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/internal/test"
 	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
 	"github.com/lightningnetwork/lnd/lnrpc"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,23 +28,24 @@ func testQuoteRequest(t *harnessTest) {
 	// Generate a random asset group key.
 	randomGroupPrivateKey := test.RandPrivKey(t.t)
 
-	quoteRequestMsgData, err := rfqmsg.NewQuoteRequestMsgData(
-		randomQuoteRequestId, nil, randomGroupPrivateKey.PubKey(), 42,
-		10, 4,
+	peer := route.Vertex(t.lndHarness.Alice.PubKey[:])
+
+	quoteRequest := rfqmsg.NewRequestMsg(
+		peer, randomQuoteRequestId, nil, randomGroupPrivateKey.PubKey(),
+		42, 10, 4,
 	)
 	require.NoError(t.t, err, "unable to create quote request message data")
 
-	// TLV encode the quote request.
-	quoteReqBytes, err := quoteRequestMsgData.Bytes()
-	require.NoError(t.t, err, "unable to encode quote request")
+	wireMsg, err := quoteRequest.ToWire()
+	require.NoError(t.t, err, "unable to create wire message")
 
 	resAlice := t.lndHarness.Alice.RPC.GetInfo()
 	t.Logf("Sending custom message to alias: %s", resAlice.Alias)
 
 	t.lndHarness.Bob.RPC.SendCustomMessage(&lnrpc.SendCustomMessageRequest{
-		Peer: t.lndHarness.Alice.PubKey[:],
-		Type: rfqmsg.MsgTypeRequest,
-		Data: quoteReqBytes,
+		Peer: wireMsg.Peer[:],
+		Type: wireMsg.MsgType,
+		Data: wireMsg.Data,
 	})
 
 	// Wait for Alice to receive the quote request.

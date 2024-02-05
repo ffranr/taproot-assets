@@ -96,9 +96,9 @@ func TypeRecordRequestExchangeRateScalingExponent(
 	)
 }
 
-// RequestMsgData is a struct that represents the message data from a
+// requestMsgData is a struct that represents the message data from a
 // quote request message.
-type RequestMsgData struct {
+type requestMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
@@ -118,54 +118,8 @@ type RequestMsgData struct {
 	SuggestedExchangeRate ExchangeRate
 }
 
-func NewQuoteRequestMsgDataFromBytes(
-	data []byte) (*RequestMsgData, error) {
-
-	var msgData RequestMsgData
-	err := msgData.Decode(bytes.NewBuffer(data))
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode incoming quote "+
-			"request message data: %w", err)
-	}
-
-	err = msgData.Validate()
-	if err != nil {
-		return nil, fmt.Errorf("unable to validate quote request "+
-			"message data: %w", err)
-	}
-
-	return &msgData, nil
-}
-
-func NewQuoteRequestMsgData(id ID, assetID *asset.ID,
-	assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	scaledExchangeRate uint64,
-	exchangeRateScalingExponent uint8) (*RequestMsgData, error) {
-
-	if assetID == nil && assetGroupKey == nil {
-		return nil, fmt.Errorf("asset id and group key cannot both " +
-			"be nil")
-	}
-
-	if assetID != nil && assetGroupKey != nil {
-		return nil, fmt.Errorf("asset id and group key cannot both " +
-			"be non-nil")
-	}
-
-	return &RequestMsgData{
-		ID:            id,
-		AssetID:       assetID,
-		AssetGroupKey: assetGroupKey,
-		AssetAmount:   assetAmount,
-		SuggestedExchangeRate: ExchangeRate{
-			ScaledRate:      scaledExchangeRate,
-			ScalingExponent: exchangeRateScalingExponent,
-		},
-	}, nil
-}
-
 // Validate ensures that the quote request is valid.
-func (q *RequestMsgData) Validate() error {
+func (q *requestMsgData) Validate() error {
 	if q.AssetID == nil && q.AssetGroupKey == nil {
 		return fmt.Errorf("asset id and group key cannot both be nil")
 	}
@@ -180,7 +134,7 @@ func (q *RequestMsgData) Validate() error {
 
 // EncodeRecords determines the non-nil records to include when encoding an
 // at runtime.
-func (q *RequestMsgData) encodeRecords() []tlv.Record {
+func (q *requestMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
 	records = append(records, TypeRecordRequestID(&q.ID))
@@ -210,7 +164,7 @@ func (q *RequestMsgData) encodeRecords() []tlv.Record {
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *RequestMsgData) Encode(writer io.Writer) error {
+func (q *requestMsgData) Encode(writer io.Writer) error {
 	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
@@ -219,7 +173,7 @@ func (q *RequestMsgData) Encode(writer io.Writer) error {
 }
 
 // Bytes encodes the structure into a TLV stream and returns the bytes.
-func (q *RequestMsgData) Bytes() ([]byte, error) {
+func (q *requestMsgData) Bytes() ([]byte, error) {
 	var b bytes.Buffer
 	err := q.Encode(&b)
 	if err != nil {
@@ -230,7 +184,7 @@ func (q *RequestMsgData) Bytes() ([]byte, error) {
 }
 
 // DecodeRecords provides all TLV records for decoding.
-func (q *RequestMsgData) decodeRecords() []tlv.Record {
+func (q *requestMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordRequestID(&q.ID),
 		TypeRecordRequestAssetID(&q.AssetID),
@@ -246,7 +200,7 @@ func (q *RequestMsgData) decodeRecords() []tlv.Record {
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *RequestMsgData) Decode(r io.Reader) error {
+func (q *requestMsgData) Decode(r io.Reader) error {
 	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
@@ -259,29 +213,56 @@ type Request struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// RequestMsgData is the message data for the quote request
+	// requestMsgData is the message data for the quote request
 	// message.
-	RequestMsgData
+	requestMsgData
+}
+
+// NewRequestMsg creates a new instance of a quote request message.
+func NewRequestMsg(peer route.Vertex, id ID, assetID *asset.ID,
+	assetGroupKey *btcec.PublicKey, assetAmount uint64,
+	scaledExchangeRate uint64, exchangeRateScalingExponent uint8) Request {
+
+	return Request{
+		Peer: peer,
+		requestMsgData: requestMsgData{
+			ID:            id,
+			AssetID:       assetID,
+			AssetGroupKey: assetGroupKey,
+			AssetAmount:   assetAmount,
+			SuggestedExchangeRate: ExchangeRate{
+				ScaledRate:      scaledExchangeRate,
+				ScalingExponent: exchangeRateScalingExponent,
+			},
+		},
+	}
 }
 
 // NewRequestMsgFromWire instantiates a new instance from a wire message.
 func NewRequestMsgFromWire(wireMsg WireMessage) (*Request, error) {
-	msgData, err := NewQuoteRequestMsgDataFromBytes(wireMsg.Data)
+	var msgData requestMsgData
+	err := msgData.Decode(bytes.NewBuffer(wireMsg.Data))
 	if err != nil {
-		return nil, fmt.Errorf("unable to decode quote "+
+		return nil, fmt.Errorf("unable to decode incoming quote "+
 			"request message data: %w", err)
+	}
+
+	err = msgData.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("unable to validate quote request "+
+			"message data: %w", err)
 	}
 
 	quoteRequest := Request{
 		Peer:           wireMsg.Peer,
-		RequestMsgData: *msgData,
+		requestMsgData: msgData,
 	}
 
 	// Perform basic sanity checks on the quote request.
 	err = quoteRequest.Validate()
 	if err != nil {
-		return nil, fmt.Errorf("unable to validate quote request: "+
-			"%w", err)
+		return nil, fmt.Errorf("unable to validate quote request: %w",
+			err)
 	}
 
 	return &quoteRequest, nil
@@ -289,14 +270,14 @@ func NewRequestMsgFromWire(wireMsg WireMessage) (*Request, error) {
 
 // Validate ensures that the quote request is valid.
 func (q *Request) Validate() error {
-	return q.RequestMsgData.Validate()
+	return q.requestMsgData.Validate()
 }
 
 // ToWire returns a wire message with a serialized data field.
 func (q *Request) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
-	err := q.RequestMsgData.Encode(buff)
+	err := q.requestMsgData.Encode(buff)
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
