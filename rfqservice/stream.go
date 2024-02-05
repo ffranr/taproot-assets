@@ -7,7 +7,7 @@ import (
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
-	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	"github.com/lightninglabs/taproot-assets/rfqmsg"
 )
 
 // StreamHandlerCfg is a struct that holds the configuration parameters for the
@@ -37,16 +37,13 @@ type StreamHandler struct {
 	// messages.
 	recvRawMessages <-chan lndclient.CustomMessage
 
-	// incomingMessages is a channel which is populated with incoming
-	// (received) RFQ messages.
-	incomingMessages chan<- rfqmsg.IncomingMsg
-
 	// errRecvRawMessages is a channel that receives errors emanating from
 	// the peer raw messages subscription.
 	errRecvRawMessages <-chan error
 
-	// errChan is this system's error reporting channel.
-	errChan chan error
+	// incomingMessages is a channel which is populated with incoming
+	// (received) RFQ messages.
+	incomingMessages chan<- rfqmsg.IncomingMsg
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.

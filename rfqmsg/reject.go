@@ -1,4 +1,4 @@
-package rfqmessages
+package rfqmsg
 
 import (
 	"bytes"
@@ -91,6 +91,8 @@ type RejectErr struct {
 }
 
 var (
+	// ErrUnknownReject is the error code for when the quote is rejected
+	// for an unspecified reason.
 	ErrUnknownReject = RejectErr{
 		ErrCode: 0,
 		ErrMsg:  "unknown reject error",
@@ -104,9 +106,9 @@ var (
 	}
 )
 
-// RejectMsgData is a struct that represents the data field of a quote
+// rejectMsgData is a struct that represents the data field of a quote
 // reject message.
-type RejectMsgData struct {
+type rejectMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
@@ -117,7 +119,7 @@ type RejectMsgData struct {
 
 // EncodeRecords determines the non-nil records to include when encoding at
 // runtime.
-func (q *RejectMsgData) encodeRecords() []tlv.Record {
+func (q *rejectMsgData) encodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordRejectID(&q.ID),
 		TypeRecordRejectErr(&q.Err),
@@ -125,7 +127,7 @@ func (q *RejectMsgData) encodeRecords() []tlv.Record {
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *RejectMsgData) Encode(writer io.Writer) error {
+func (q *rejectMsgData) Encode(writer io.Writer) error {
 	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
@@ -134,7 +136,7 @@ func (q *RejectMsgData) Encode(writer io.Writer) error {
 }
 
 // DecodeRecords provides all TLV records for decoding.
-func (q *RejectMsgData) decodeRecords() []tlv.Record {
+func (q *rejectMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordRejectID(&q.ID),
 		TypeRecordRejectErr(&q.Err),
@@ -142,7 +144,7 @@ func (q *RejectMsgData) decodeRecords() []tlv.Record {
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *RejectMsgData) Decode(r io.Reader) error {
+func (q *rejectMsgData) Decode(r io.Reader) error {
 	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
@@ -155,15 +157,15 @@ type Reject struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// RejectMsgData is the message data for the quote reject message.
-	RejectMsgData
+	// rejectMsgData is the message data for the quote reject message.
+	rejectMsgData
 }
 
 // NewRejectMsg creates a new instance of a quote reject message.
 func NewRejectMsg(peer route.Vertex, id ID, rejectErr RejectErr) Reject {
 	return Reject{
 		Peer: peer,
-		RejectMsgData: RejectMsgData{
+		rejectMsgData: rejectMsgData{
 			ID:  id,
 			Err: rejectErr,
 		},
@@ -173,7 +175,7 @@ func NewRejectMsg(peer route.Vertex, id ID, rejectErr RejectErr) Reject {
 // NewQuoteRejectFromWireMsg instantiates a new instance from a wire message.
 func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*Reject, error) {
 	// Decode message data component from TLV bytes.
-	var msgData RejectMsgData
+	var msgData rejectMsgData
 	err := msgData.Decode(bytes.NewReader(wireMsg.Data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote reject "+
@@ -182,7 +184,7 @@ func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*Reject, error) {
 
 	return &Reject{
 		Peer:          wireMsg.Peer,
-		RejectMsgData: msgData,
+		rejectMsgData: msgData,
 	}, nil
 }
 
@@ -190,7 +192,7 @@ func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*Reject, error) {
 func (q *Reject) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
-	err := q.RejectMsgData.Encode(buff)
+	err := q.rejectMsgData.Encode(buff)
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)

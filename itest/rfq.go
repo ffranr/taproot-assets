@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/lightninglabs/taproot-assets/internal/test"
-	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	"github.com/lightninglabs/taproot-assets/rfqmsg"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"

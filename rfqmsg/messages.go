@@ -1,4 +1,4 @@
-package rfqmessages
+package rfqmsg
 
 import (
 	"github.com/lightningnetwork/lnd/lnwire"

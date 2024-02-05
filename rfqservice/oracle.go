@@ -8,7 +8,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
-	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	"github.com/lightninglabs/taproot-assets/rfqmsg"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )

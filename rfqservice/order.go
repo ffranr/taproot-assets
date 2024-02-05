@@ -9,7 +9,7 @@ import (
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
-	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	"github.com/lightninglabs/taproot-assets/rfqmsg"
 	"github.com/lightningnetwork/lnd/lnwire"
 )
 
