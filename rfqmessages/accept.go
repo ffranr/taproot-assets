@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/tlv"
 )
@@ -13,20 +14,46 @@ import (
 const (
 	// Accept message type field TLV types.
 
-	TypeAcceptID             tlv.Type = 0
-	TypeAcceptCharacteristic tlv.Type = 2
-	TypeAcceptExpiry         tlv.Type = 4
-	TypeAcceptSignature      tlv.Type = 6
+	TypeAcceptID          tlv.Type = 0
+	TypeAcceptAskingPrice tlv.Type = 2
+	TypeAcceptExpiry      tlv.Type = 4
+	TypeAcceptSignature   tlv.Type = 6
 )
 
 func TypeRecordAcceptID(id *ID) tlv.Record {
 	return tlv.MakePrimitiveRecord(TypeAcceptID, id)
 }
 
-func TypeRecordAcceptCharacteristic(characteristic *uint64) tlv.Record {
-	return tlv.MakePrimitiveRecord(
-		TypeAcceptCharacteristic, characteristic,
+func TypeRecordAcceptAskingPrice(askingPrice *lnwire.MilliSatoshi) tlv.Record {
+	return tlv.MakeStaticRecord(
+		TypeAcceptAskingPrice, askingPrice, 8, milliSatoshiEncoder,
+		milliSatoshiDecoder,
 	)
+}
+
+func milliSatoshiEncoder(w io.Writer, val interface{}, buf *[8]byte) error {
+	if ms, ok := val.(*lnwire.MilliSatoshi); ok {
+		return tlv.EUint64(w, uint64(*ms), buf)
+	}
+
+	return tlv.NewTypeForEncodingErr(val, "MilliSatoshi")
+}
+
+func milliSatoshiDecoder(r io.Reader, val interface{}, buf *[8]byte,
+	l uint64) error {
+
+	if ms, ok := val.(*lnwire.MilliSatoshi); ok {
+		var msInt uint64
+		err := tlv.DUint64(r, &msInt, buf, l)
+		if err != nil {
+			return err
+		}
+
+		*ms = lnwire.MilliSatoshi(msInt)
+		return nil
+	}
+
+	return tlv.NewTypeForDecodingErr(val, "MilliSatoshi", l, 8)
 }
 
 func TypeRecordAcceptExpiry(expirySeconds *uint64) tlv.Record {
@@ -47,18 +74,8 @@ type AcceptMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
-	// AmtCharacteristic is the characteristic of the asset amount that
-	// determines the fee rate.
-	//
-	//suggested_rate_tick is the internal unit used for asset conversions.
-	//	A tick is 1/10000th of a currency unit. It gives us up to 4
-	//decimal places of precision (0.0001 or 0.01% or 1 bps). As an example,
-	//if the BTC/USD rate was $61,234.95, then we multiply that by 10,000 to
-	//arrive at the usd_rate_tick: $61,234.95 * 10000 = 612,349,500. To
-	//convert back to our normal rate, we decide by 10,000 to arrive back at
-	//$61,234.95.
-	//
-	AmtCharacteristic uint64
+	// AskingPrice is the asking price of the quote.
+	AskingPrice lnwire.MilliSatoshi
 
 	// ExpirySeconds is the number of seconds until the quote expires.
 	ExpirySeconds uint64
@@ -75,11 +92,8 @@ func (q *AcceptMsgData) encodeRecords() []tlv.Record {
 	// Add ID record.
 	records = append(records, TypeRecordAcceptID(&q.ID))
 
-	// Add characteristic record.
-	record := TypeRecordAcceptCharacteristic(
-		&q.AmtCharacteristic,
-	)
-	records = append(records, record)
+	// Add asking price record.
+	records = append(records, TypeRecordAcceptAskingPrice(&q.AskingPrice))
 
 	// Add expiry record.
 	records = append(
@@ -107,7 +121,7 @@ func (q *AcceptMsgData) Encode(writer io.Writer) error {
 func (q *AcceptMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordAcceptID(&q.ID),
-		TypeRecordAcceptCharacteristic(&q.AmtCharacteristic),
+		TypeRecordAcceptAskingPrice(&q.AskingPrice),
 		TypeRecordAcceptExpiry(&q.ExpirySeconds),
 		TypeRecordAcceptSig(&q.sig),
 	}
@@ -129,6 +143,20 @@ type Accept struct {
 
 	// AcceptMsgData is the message data for the quote accept message.
 	AcceptMsgData
+}
+
+// NewQuoteAccept creates a new instance of a quote accept message.
+func NewQuoteAccept(peer route.Vertex, id ID, askingPrice uint64,
+	expirySeconds uint64, sig [64]byte) Accept {
+	return Accept{
+		Peer: peer,
+		AcceptMsgData: AcceptMsgData{
+			ID:            id,
+			AskingPrice:   lnwire.MilliSatoshi(askingPrice),
+			ExpirySeconds: expirySeconds,
+			sig:           sig,
+		},
+	}
 }
 
 // NewQuoteAcceptFromWireMsg instantiates a new instance from a wire message.

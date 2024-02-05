@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
 	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 	"google.golang.org/grpc"
@@ -19,7 +20,7 @@ type PriceOracleSuggestedRate struct {
 	AssetID *asset.ID
 
 	// AssetGroupKey is the asset group key.
-	AssetGroupKey *asset.GroupKey
+	AssetGroupKey *btcec.PublicKey
 
 	// AssetAmount is the asset amount.
 	AssetAmount uint64
@@ -29,14 +30,17 @@ type PriceOracleSuggestedRate struct {
 
 	// Expiry is the suggested rate expiry lifetime unix timestamp.
 	Expiry uint64
+
+	// Err is the error returned by the price oracle service.
+	Err msg.RejectErr
 }
 
 // PriceOracle is an interface that provides exchange rate information for
 // assets.
 type PriceOracle interface {
-	// QueryExchangeRate returns the exchange rate for the given asset.
-	QueryExchangeRate(ctx context.Context, assetId *asset.ID,
-		assetGroupKey *asset.GroupKey, assetAmount uint64,
+	// QueryAskingPrice returns the asking price for the given asset amount.
+	QueryAskingPrice(ctx context.Context, assetId *asset.ID,
+		assetGroupKey *btcec.PublicKey, assetAmount uint64,
 		suggestedRate *msg.ExchangeRate) (*PriceOracleSuggestedRate,
 		error)
 }
@@ -77,16 +81,19 @@ func NewRpcPriceOracle(addr url.URL) (*RpcPriceOracle, error) {
 	return &RpcPriceOracle{}, nil
 }
 
-// QueryExchangeRate returns the exchange rate for the given asset.
-func (r *RpcPriceOracle) QueryExchangeRate(ctx context.Context,
-	assetId *asset.ID, assetGroupKey *asset.GroupKey, assetAmount uint64,
-	suggestedRate *msg.ExchangeRate) (*msg.ExchangeRate, error) {
+// QueryAskingPrice returns the asking price for the given asset amount.
+func (r *RpcPriceOracle) QueryAskingPrice(ctx context.Context,
+	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmount uint64,
+	suggestedRate *msg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
 
 	//// Call the external oracle service to get the exchange rate.
 	//conn := getClientConn(ctx, false)
 
 	return nil, nil
 }
+
+// Ensure that RpcPriceOracle implements the PriceOracle interface.
+var _ PriceOracle = (*RpcPriceOracle)(nil)
 
 // MockPriceOracle is a mock implementation of the PriceOracle interface.
 // It returns the suggested rate as the exchange rate.
@@ -101,9 +108,9 @@ func NewMockPriceOracle(rateLifetime uint64) *MockPriceOracle {
 	}
 }
 
-// QueryExchangeRate returns the suggested rate as the exchange rate.
-func (m *MockPriceOracle) QueryExchangeRate(_ context.Context,
-	assetId *asset.ID, assetGroupKey *asset.GroupKey, assetAmt uint64,
+// QueryAskingPrice returns the asking price for the given asset amount.
+func (m *MockPriceOracle) QueryAskingPrice(_ context.Context,
+	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmt uint64,
 	suggestedRate *msg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
 
 	// Calculate the rate expiry lifetime.

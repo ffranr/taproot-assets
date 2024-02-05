@@ -30,6 +30,10 @@ type ManagerCfg struct {
 	// HtlcInterceptor is the HTLC interceptor. This component is used to
 	// intercept and accept/reject HTLCs.
 	HtlcInterceptor HtlcInterceptor
+
+	// PriceOracle is the price oracle that the RFQ manager will use to
+	// determine whether a quote is accepted or rejected.
+	PriceOracle PriceOracle
 }
 
 // Manager is a struct that handles the request for quote (RFQ) system.
@@ -153,7 +157,9 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	}
 
 	// Initialise and start the quote negotiator.
-	m.negotiator, err = NewNegotiator()
+	m.negotiator, err = NewNegotiator(NegotiatorCfg{
+		PriceOracle: m.cfg.PriceOracle,
+	})
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ negotiator: %w",
 			err)

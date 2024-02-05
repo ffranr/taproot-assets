@@ -90,7 +90,7 @@ func NewChannelRemit(assetAmount uint64,
 	// Calculate the minimum number of millisatoshis that must be sent in
 	// the HTLC.
 	minimumMillisats, err := calcMillisatsFromAssetAmt(
-		assetAmount, quoteAccept.AmtCharacteristic,
+		assetAmount, uint64(quoteAccept.AskingPrice),
 		defaultExchangeRateScalingExponent,
 	)
 	if err != nil {
@@ -104,7 +104,7 @@ func NewChannelRemit(assetAmount uint64,
 	return &ChannelRemit{
 		Scid:                        scid,
 		AssetAmount:                 assetAmount,
-		ScaledExchangeRate:          quoteAccept.AmtCharacteristic,
+		ScaledExchangeRate:          uint64(quoteAccept.AskingPrice),
 		ExchangeRateScalingExponent: defaultExchangeRateScalingExponent,
 		MinimumMillisats:            minimumMillisats,
 		ExpirySeconds:               quoteAccept.ExpirySeconds,

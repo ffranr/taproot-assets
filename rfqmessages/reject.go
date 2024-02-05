@@ -12,18 +12,107 @@ import (
 const (
 	// Reject message type field TLV types.
 
-	TypeRejectID tlv.Type = 0
+	TypeRejectID  tlv.Type = 0
+	TypeRejectErr tlv.Type = 1
 )
 
 func TypeRecordRejectID(id *ID) tlv.Record {
 	return tlv.MakePrimitiveRecord(TypeRejectID, id)
 }
 
+func TypeRecordRejectErr(rejectErr *RejectErr) tlv.Record {
+	sizeFunc := func() uint64 {
+		return 4 + uint64(len(rejectErr.ErrMsg))
+	}
+	return tlv.MakeDynamicRecord(
+		TypeRejectErr, rejectErr, sizeFunc,
+		rejectErrEncoder, rejectErrDecoder,
+	)
+}
+
+func rejectErrEncoder(w io.Writer, val any, buf *[8]byte) error {
+	if typ, ok := val.(**RejectErr); ok {
+		v := *typ
+
+		// Encode error code.
+		err := tlv.EUint8T(w, v.ErrCode, buf)
+		if err != nil {
+			return err
+		}
+
+		// Encode error message.
+		msgBytes := []byte(v.ErrMsg)
+		err = tlv.EVarBytes(w, msgBytes, buf)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	return tlv.NewTypeForEncodingErr(val, "RejectErr")
+}
+
+func rejectErrDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
+	if typ, ok := val.(**RejectErr); ok {
+		var errCode uint8
+		err := tlv.DUint8(r, &errCode, buf, 4)
+		if err != nil {
+			return err
+		}
+
+		var errMsgBytes []byte
+		err = tlv.DVarBytes(r, &errMsgBytes, buf, l-4)
+		if err != nil {
+			return err
+		}
+
+		rejectErr := &RejectErr{
+			ErrCode: errCode,
+			ErrMsg:  string(errMsgBytes),
+		}
+
+		*typ = rejectErr
+		return nil
+	}
+
+	return tlv.NewTypeForDecodingErr(val, "RejectErr", l, l)
+}
+
+// RejectErr is a struct that represents the error code and message of a quote
+// reject message.
+type RejectErr struct {
+	// ErrCode is the error code that provides the reason for the rejection.
+	ErrCode uint8
+
+	// ErrMsg is the error message that provides the reason for the
+	// rejection.
+	ErrMsg string
+}
+
+var (
+	ErrUnknownReject = RejectErr{
+		ErrCode: 0,
+		ErrMsg:  "unknown reject error",
+	}
+
+	// ErrPriceOracleUnavailable is the error code for when the price
+	// oracle is unavailable.
+	ErrPriceOracleUnavailable = RejectErr{
+		ErrCode: 1,
+		ErrMsg:  "price oracle service unavailable",
+	}
+)
+
 // RejectMsgData is a struct that represents the data field of a quote
 // reject message.
 type RejectMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
+
+	// Err is the error code and message that provides the reason for the
+	// rejection.
+	Err RejectErr
 }
 
 // EncodeRecords determines the non-nil records to include when encoding at
@@ -31,6 +120,7 @@ type RejectMsgData struct {
 func (q *RejectMsgData) encodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordRejectID(&q.ID),
+		TypeRecordRejectErr(&q.Err),
 	}
 }
 
@@ -47,6 +137,7 @@ func (q *RejectMsgData) Encode(writer io.Writer) error {
 func (q *RejectMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordRejectID(&q.ID),
+		TypeRecordRejectErr(&q.Err),
 	}
 }
 
@@ -66,6 +157,17 @@ type Reject struct {
 
 	// RejectMsgData is the message data for the quote reject message.
 	RejectMsgData
+}
+
+// NewQuoteReject creates a new instance of a quote reject message.
+func NewQuoteReject(peer route.Vertex, id ID, rejectErr RejectErr) Reject {
+	return Reject{
+		Peer: peer,
+		RejectMsgData: RejectMsgData{
+			ID:  id,
+			Err: rejectErr,
+		},
+	}
 }
 
 // NewQuoteRejectFromWireMsg instantiates a new instance from a wire message.

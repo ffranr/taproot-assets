@@ -1,11 +1,19 @@
 package rfqservice
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/lightninglabs/taproot-assets/fn"
 	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
+
+// NegotiatorCfg holds the configuration for the negotiator.
+type NegotiatorCfg struct {
+	// PriceOracle is the price oracle that the negotiator will use to
+	// determine whether a quote is accepted or rejected.
+	PriceOracle PriceOracle
+}
 
 // Negotiator is a struct that handles the negotiation of quotes. It is a
 // subsystem of the RFQ system. It determines whether a quote is accepted or
@@ -14,15 +22,14 @@ type Negotiator struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
 
+	// cfg holds the configuration parameters for the negotiator.
+	cfg NegotiatorCfg
+
 	// AcceptedQuotes is a channel which is populated with accepted quotes.
 	AcceptedQuotes *fn.EventReceiver[msg.Accept]
 
-	// incomingQuoteRequests is a channel which is populated with
-	// unprocessed incoming (received) quote request messages.
-	incomingQuoteRequests <-chan msg.Request
-
-	// ErrChan is the handle's error reporting channel.
-	ErrChan <-chan error
+	// RejectedQuotes is a channel which is populated with rejected quotes.
+	RejectedQuotes *fn.EventReceiver[msg.Reject]
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
@@ -30,15 +37,19 @@ type Negotiator struct {
 }
 
 // NewNegotiator creates a new quote negotiator.
-func NewNegotiator() (*Negotiator, error) {
+func NewNegotiator(cfg NegotiatorCfg) (*Negotiator, error) {
 	acceptedQuotes := fn.NewEventReceiver[msg.Accept](
+		fn.DefaultQueueSize,
+	)
+	rejectedQuotes := fn.NewEventReceiver[msg.Reject](
 		fn.DefaultQueueSize,
 	)
 
 	return &Negotiator{
-		AcceptedQuotes: acceptedQuotes,
+		cfg: cfg,
 
-		ErrChan: make(<-chan error),
+		AcceptedQuotes: acceptedQuotes,
+		RejectedQuotes: rejectedQuotes,
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -47,27 +58,111 @@ func NewNegotiator() (*Negotiator, error) {
 	}, nil
 }
 
+// queryPriceOracle queries the price oracle for the asking price.
+//
+// NOTE: This method must be thread-safe.
+func (n *Negotiator) queryPriceOracle(
+	req msg.Request) (*PriceOracleSuggestedRate, error) {
+
+	ctx, cancel := n.WithCtxQuitNoTimeout()
+	defer cancel()
+
+	res, err := n.cfg.PriceOracle.QueryAskingPrice(
+		ctx, req.AssetID, req.AssetGroupKey, req.AssetAmount,
+		&req.SuggestedExchangeRate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query price oracle: %w", err)
+	}
+
+	return res, nil
+}
+
+// handlePriceOracleResponse handles the response from the price oracle.
+func (n *Negotiator) handlePriceOracleResponse(
+	req msg.Request, res *PriceOracleSuggestedRate) error {
+
+	// If the suggested rate is nil, then we will return the error message
+	// supplied by the price oracle.
+	if res.SuggestedRate == nil {
+		rejectMsg := msg.NewQuoteReject(req.Peer, req.ID, res.Err)
+
+		sendSuccess := fn.SendOrQuit(
+			n.RejectedQuotes.NewItemCreated.ChanIn(), rejectMsg,
+			n.Quit,
+		)
+		if !sendSuccess {
+			return fmt.Errorf("negotiator failed to send reject " +
+				"message")
+		}
+	}
+
+	// If the suggested rate is not nil, then we can proceed to respond
+	// with an accept message.
+	var sig [64]byte
+	acceptMsg := msg.NewQuoteAccept(
+		req.Peer, req.ID, res.SuggestedRate.ScaledRate, res.Expiry, sig,
+	)
+
+	sendSuccess := fn.SendOrQuit(
+		n.AcceptedQuotes.NewItemCreated.ChanIn(), acceptMsg, n.Quit,
+	)
+	if !sendSuccess {
+		return fmt.Errorf("negotiator failed populate accept message " +
+			"channel")
+	}
+
+	return nil
+}
+
 // HandleIncomingQuoteRequest handles an incoming quote request.
-func (h *Negotiator) HandleIncomingQuoteRequest(_ msg.Request) error {
-	// TODO(ffranr): Push quote request onto queue. We will need to handle
-	//  quote requests synchronously, because we may need to contact
-	//  an external oracle service for each request.
+func (n *Negotiator) HandleIncomingQuoteRequest(req msg.Request) error {
+	// If there is no price oracle, then we cannot proceed with the
+	// negotiation. We will reject the quote request with an error.
+	if n.cfg.PriceOracle == nil {
+		rejectMsg := msg.NewQuoteReject(
+			req.Peer, req.ID, msg.ErrPriceOracleUnavailable,
+		)
+
+		sendSuccess := fn.SendOrQuit(
+			n.RejectedQuotes.NewItemCreated.ChanIn(), rejectMsg,
+			n.Quit,
+		)
+		if !sendSuccess {
+			return fmt.Errorf("negotiator failed to send reject " +
+				"message")
+		}
+	}
+
+	// Query the price oracle in a separate goroutine in case it is a
+	// remote service and takes a long time to respond.
+	n.Wg.Add(1)
+	go func() {
+		defer n.Wg.Done()
+
+		oracleResp, err := n.queryPriceOracle(req)
+		if err != nil {
+			log.Errorf("negotiator failed to query price oracle: "+
+				"%v", err)
+		}
+
+		err = n.handlePriceOracleResponse(req, oracleResp)
+		if err != nil {
+			log.Errorf("negotiator failed to handle price oracle "+
+				"response: %v", err)
+		}
+	}()
 
 	return nil
 }
 
 // mainEventLoop executes the main event handling loop.
-func (h *Negotiator) mainEventLoop() {
+func (n *Negotiator) mainEventLoop() {
 	log.Debug("Starting negotiator event loop")
 
 	for {
 		select {
-		case quoteRequest := <-h.incomingQuoteRequests:
-			quoteRequest = quoteRequest
-
-		// TODO(ffranr): Consume from quote request queue channel here.
-
-		case <-h.Quit:
+		case <-n.Quit:
 			log.Debug("Received quit signal. Stopping negotiator " +
 				"event loop")
 			return
@@ -76,25 +171,25 @@ func (h *Negotiator) mainEventLoop() {
 }
 
 // Start starts the service.
-func (h *Negotiator) Start() error {
+func (n *Negotiator) Start() error {
 	log.Info("Starting RFQ subsystem: negotiator")
 
 	var startErr error
-	h.startOnce.Do(func() {
+	n.startOnce.Do(func() {
 		// Start the main event loop in a separate goroutine.
-		h.Wg.Add(1)
+		n.Wg.Add(1)
 		go func() {
-			defer h.Wg.Done()
-			h.mainEventLoop()
+			defer n.Wg.Done()
+			n.mainEventLoop()
 		}()
 	})
 	return startErr
 }
 
 // Stop stops the handler.
-func (h *Negotiator) Stop() error {
+func (n *Negotiator) Stop() error {
 	log.Info("Stopping RFQ subsystem: quote negotiator")
 
-	close(h.Quit)
+	close(n.Quit)
 	return nil
 }
