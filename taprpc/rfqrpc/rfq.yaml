@@ -1,0 +1,9 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: rfq.RfqPriceOracle.QueryExchangeRate
+      get: "/v1/taproot-assets/rfq/priceoracle/asset-id/{id.asset_id_str}"
+      additional_bindings:
+        - get: "/v1/taproot-assets/rfq/priceoracle/group-key/{id.group_key_str}"

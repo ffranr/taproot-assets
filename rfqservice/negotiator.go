@@ -15,11 +15,11 @@ type Negotiator struct {
 	stopOnce  sync.Once
 
 	// AcceptedQuotes is a channel which is populated with accepted quotes.
-	AcceptedQuotes *fn.EventReceiver[msg.QuoteAccept]
+	AcceptedQuotes *fn.EventReceiver[msg.Accept]
 
 	// incomingQuoteRequests is a channel which is populated with
 	// unprocessed incoming (received) quote request messages.
-	incomingQuoteRequests <-chan msg.QuoteRequest
+	incomingQuoteRequests <-chan msg.Request
 
 	// ErrChan is the handle's error reporting channel.
 	ErrChan <-chan error
@@ -31,7 +31,7 @@ type Negotiator struct {
 
 // NewNegotiator creates a new quote negotiator.
 func NewNegotiator() (*Negotiator, error) {
-	acceptedQuotes := fn.NewEventReceiver[msg.QuoteAccept](
+	acceptedQuotes := fn.NewEventReceiver[msg.Accept](
 		fn.DefaultQueueSize,
 	)
 
@@ -48,7 +48,7 @@ func NewNegotiator() (*Negotiator, error) {
 }
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
-func (h *Negotiator) HandleIncomingQuoteRequest(_ msg.QuoteRequest) error {
+func (h *Negotiator) HandleIncomingQuoteRequest(_ msg.Request) error {
 	// TODO(ffranr): Push quote request onto queue. We will need to handle
 	//  quote requests synchronously, because we may need to contact
 	//  an external oracle service for each request.

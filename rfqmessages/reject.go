@@ -10,32 +10,32 @@ import (
 )
 
 const (
-	// TypeRejectData field TLV types.
+	// Reject message type field TLV types.
 
-	TypeRejectDataID tlv.Type = 0
+	TypeRejectID tlv.Type = 0
 )
 
-func TypeRecordRejectDataID(id *ID) tlv.Record {
-	return tlv.MakePrimitiveRecord(TypeRejectDataID, id)
+func TypeRecordRejectID(id *ID) tlv.Record {
+	return tlv.MakePrimitiveRecord(TypeRejectID, id)
 }
 
-// QuoteRejectMsgData is a struct that represents the data field of a quote
+// RejectMsgData is a struct that represents the data field of a quote
 // reject message.
-type QuoteRejectMsgData struct {
+type RejectMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 }
 
 // EncodeRecords determines the non-nil records to include when encoding at
 // runtime.
-func (q *QuoteRejectMsgData) encodeRecords() []tlv.Record {
+func (q *RejectMsgData) encodeRecords() []tlv.Record {
 	return []tlv.Record{
-		TypeRecordRejectDataID(&q.ID),
+		TypeRecordRejectID(&q.ID),
 	}
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *QuoteRejectMsgData) Encode(writer io.Writer) error {
+func (q *RejectMsgData) Encode(writer io.Writer) error {
 	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
@@ -44,14 +44,14 @@ func (q *QuoteRejectMsgData) Encode(writer io.Writer) error {
 }
 
 // DecodeRecords provides all TLV records for decoding.
-func (q *QuoteRejectMsgData) decodeRecords() []tlv.Record {
+func (q *RejectMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
-		TypeRecordRejectDataID(&q.ID),
+		TypeRecordRejectID(&q.ID),
 	}
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *QuoteRejectMsgData) Decode(r io.Reader) error {
+func (q *RejectMsgData) Decode(r io.Reader) error {
 	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
@@ -59,36 +59,36 @@ func (q *QuoteRejectMsgData) Decode(r io.Reader) error {
 	return stream.Decode(r)
 }
 
-// QuoteReject is a struct that represents a quote reject message.
-type QuoteReject struct {
+// Reject is a struct that represents a quote reject message.
+type Reject struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// QuoteRejectMsgData is the message data for the quote reject message.
-	QuoteRejectMsgData
+	// RejectMsgData is the message data for the quote reject message.
+	RejectMsgData
 }
 
 // NewQuoteRejectFromWireMsg instantiates a new instance from a wire message.
-func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*QuoteReject, error) {
+func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*Reject, error) {
 	// Decode message data component from TLV bytes.
-	var msgData QuoteRejectMsgData
+	var msgData RejectMsgData
 	err := msgData.Decode(bytes.NewReader(wireMsg.Data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote reject "+
 			"message data: %w", err)
 	}
 
-	return &QuoteReject{
-		Peer:               wireMsg.Peer,
-		QuoteRejectMsgData: msgData,
+	return &Reject{
+		Peer:          wireMsg.Peer,
+		RejectMsgData: msgData,
 	}, nil
 }
 
 // ToWire returns a wire message with a serialized data field.
-func (q *QuoteReject) ToWire() (WireMessage, error) {
+func (q *Reject) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
-	err := q.QuoteRejectMsgData.Encode(buff)
+	err := q.RejectMsgData.Encode(buff)
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
@@ -103,4 +103,4 @@ func (q *QuoteReject) ToWire() (WireMessage, error) {
 }
 
 // Ensure that the message type implements the OutgoingMessage interface.
-var _ OutgoingMessage = (*QuoteReject)(nil)
+var _ OutgoingMessage = (*Reject)(nil)

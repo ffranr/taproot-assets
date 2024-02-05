@@ -34,7 +34,7 @@ type StreamHandler struct {
 
 	// IncomingQuoteRequests is a channel which is populated with incoming
 	// (received) and valid quote request messages.
-	IncomingQuoteRequests *fn.EventReceiver[msg.QuoteRequest]
+	IncomingQuoteRequests *fn.EventReceiver[msg.Request]
 
 	// errChan is this system's error reporting channel.
 	errChan chan error
@@ -57,7 +57,7 @@ func NewStreamHandler(ctx context.Context,
 			"messages via message transfer handle: %w", err)
 	}
 
-	incomingQuoteRequests := fn.NewEventReceiver[msg.QuoteRequest](
+	incomingQuoteRequests := fn.NewEventReceiver[msg.Request](
 		fn.DefaultQueueSize,
 	)
 

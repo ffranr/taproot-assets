@@ -185,7 +185,7 @@ func (m *Manager) stopSubsystems() error {
 }
 
 // handleIncomingQuoteRequest handles an incoming quote request.
-func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
+func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.Request) error {
 	// Forward the incoming quote request to the quote negotiator so that
 	// it may determine whether the quote should be accepted or rejected.
 	err := m.negotiator.HandleIncomingQuoteRequest(quoteReq)
@@ -198,7 +198,7 @@ func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.QuoteRequest) error {
 }
 
 // handleOutgoingQuoteAccept handles an outgoing quote accept message.
-func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.QuoteAccept) error {
+func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.Accept) error {
 	// Inform the HTLC order handler that we've accepted the quote request.
 	//m.orderHandler.RegisterChannelRemit(quoteAccept)
 

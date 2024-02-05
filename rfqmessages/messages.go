@@ -51,3 +51,13 @@ type OutgoingMessage interface {
 	// ToWire returns a wire message with a serialized data field.
 	ToWire() (WireMessage, error)
 }
+
+// ExchangeRate is a struct that represents an asset exchange rate.
+type ExchangeRate struct {
+	// ScaledRate is the exchange rate scaled by ScalingExponent.
+	ScaledRate uint64
+
+	// ScalingExponent is the exponent (base 10) used to scale the exchange
+	// rate.
+	ScalingExponent uint8
+}

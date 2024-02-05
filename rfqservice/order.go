@@ -85,7 +85,7 @@ type ChannelRemit struct {
 
 // NewChannelRemit creates a new channel remit.
 func NewChannelRemit(assetAmount uint64,
-	quoteAccept msg.QuoteAccept) (*ChannelRemit, error) {
+	quoteAccept msg.Accept) (*ChannelRemit, error) {
 
 	// Calculate the minimum number of millisatoshis that must be sent in
 	// the HTLC.
@@ -293,7 +293,7 @@ func (h *OrderHandler) Start() error {
 // RegisterChannelRemit registers a channel management remit. If a remit exists
 // for the channel SCID, it is overwritten.
 func (h *OrderHandler) RegisterChannelRemit(assetAmount uint64,
-	quoteAccept msg.QuoteAccept) error {
+	quoteAccept msg.Accept) error {
 
 	channelRemit, err := NewChannelRemit(assetAmount, quoteAccept)
 	if err != nil {

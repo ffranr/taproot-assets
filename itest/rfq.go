@@ -29,7 +29,7 @@ func testQuoteRequest(t *harnessTest) {
 
 	quoteRequestMsgData, err := rfqmsg.NewQuoteRequestMsgData(
 		randomQuoteRequestId, nil, randomGroupPrivateKey.PubKey(), 42,
-		10,
+		10, 4,
 	)
 	require.NoError(t.t, err, "unable to create quote request message data")
 

@@ -13,25 +13,26 @@ import (
 )
 
 const (
-	// TypeRequestData field TLV types.
+	// Request message type field TLV types.
 
-	TypeRequestDataID                tlv.Type = 0
-	TypeRequestDataAssetID           tlv.Type = 1
-	TypeRequestDataGroupKey          tlv.Type = 3
-	TypeRequestDataAssetAmount       tlv.Type = 4
-	TypeRequestDataAmtCharacteristic tlv.Type = 6
+	TypeRequestID                          tlv.Type = 0
+	TypeRequestAssetID                     tlv.Type = 1
+	TypeRequestAssetGroupKey               tlv.Type = 3
+	TypeRequestAssetAmount                 tlv.Type = 4
+	TypeRequestScaledExchangeRate          tlv.Type = 6
+	TypeRequestExchangeRateScalingExponent tlv.Type = 8
 )
 
-func TypeRecordRequestDataID(id *ID) tlv.Record {
+func TypeRecordRequestID(id *ID) tlv.Record {
 	idBytes := (*[32]byte)(id)
-	return tlv.MakePrimitiveRecord(TypeRequestDataID, idBytes)
+	return tlv.MakePrimitiveRecord(TypeRequestID, idBytes)
 }
 
-func TypeRecordRequestDataAssetID(assetID **asset.ID) tlv.Record {
+func TypeRecordRequestAssetID(assetID **asset.ID) tlv.Record {
 	const recordSize = sha256.Size
 
 	return tlv.MakeStaticRecord(
-		TypeRequestDataAssetID, assetID, recordSize,
+		TypeRequestAssetID, assetID, recordSize,
 		IDEncoder, IDDecoder,
 	)
 }
@@ -66,28 +67,38 @@ func IDDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
 	return tlv.NewTypeForDecodingErr(val, "AssetID", l, sha256.Size)
 }
 
-func TypeRecordRequestDataGroupKey(groupKey **btcec.PublicKey) tlv.Record {
+func TypeRecordRequestAssetGroupKey(groupKey **btcec.PublicKey) tlv.Record {
 	const recordSize = btcec.PubKeyBytesLenCompressed
 
 	return tlv.MakeStaticRecord(
-		TypeRequestDataGroupKey, groupKey, recordSize,
+		TypeRequestAssetGroupKey, groupKey, recordSize,
 		asset.CompressedPubKeyEncoder, asset.CompressedPubKeyDecoder,
 	)
 }
 
-func TypeRecordRequestDataAssetAmount(assetAmount *uint64) tlv.Record {
-	return tlv.MakePrimitiveRecord(TypeRequestDataAssetAmount, assetAmount)
+func TypeRecordRequestAssetAmount(assetAmount *uint64) tlv.Record {
+	return tlv.MakePrimitiveRecord(TypeRequestAssetAmount, assetAmount)
 }
 
-func TypeRecordRequestDataAmtCharacteristic(amtCharacteristic *uint64) tlv.Record {
+func TypeRecordRequestScaledExchangeRate(
+	scaledExchangeRate *uint64) tlv.Record {
+
 	return tlv.MakePrimitiveRecord(
-		TypeRequestDataAmtCharacteristic, amtCharacteristic,
+		TypeRequestScaledExchangeRate, scaledExchangeRate,
 	)
 }
 
-// QuoteRequestMsgData is a struct that represents the message data from a
+func TypeRecordRequestExchangeRateScalingExponent(
+	scalingExponent *uint8) tlv.Record {
+
+	return tlv.MakePrimitiveRecord(
+		TypeRequestExchangeRateScalingExponent, scalingExponent,
+	)
+}
+
+// RequestMsgData is a struct that represents the message data from a
 // quote request message.
-type QuoteRequestMsgData struct {
+type RequestMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
@@ -103,15 +114,14 @@ type QuoteRequestMsgData struct {
 	// requesting a quote.
 	AssetAmount uint64
 
-	// AmtCharacteristic is the characteristic of the asset amount that
-	// determines the conversion rate.
-	AmtCharacteristic uint64
+	// SuggestedExchangeRate is the suggested exchange rate for the asset.
+	SuggestedExchangeRate ExchangeRate
 }
 
 func NewQuoteRequestMsgDataFromBytes(
-	data []byte) (*QuoteRequestMsgData, error) {
+	data []byte) (*RequestMsgData, error) {
 
-	var msgData QuoteRequestMsgData
+	var msgData RequestMsgData
 	err := msgData.Decode(bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode incoming quote "+
@@ -129,7 +139,8 @@ func NewQuoteRequestMsgDataFromBytes(
 
 func NewQuoteRequestMsgData(id ID, assetID *asset.ID,
 	assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	amtCharacteristic uint64) (*QuoteRequestMsgData, error) {
+	scaledExchangeRate uint64,
+	exchangeRateScalingExponent uint8) (*RequestMsgData, error) {
 
 	if assetID == nil && assetGroupKey == nil {
 		return nil, fmt.Errorf("asset id and group key cannot both " +
@@ -141,17 +152,20 @@ func NewQuoteRequestMsgData(id ID, assetID *asset.ID,
 			"be non-nil")
 	}
 
-	return &QuoteRequestMsgData{
-		ID:                id,
-		AssetID:           assetID,
-		AssetGroupKey:     assetGroupKey,
-		AssetAmount:       assetAmount,
-		AmtCharacteristic: amtCharacteristic,
+	return &RequestMsgData{
+		ID:            id,
+		AssetID:       assetID,
+		AssetGroupKey: assetGroupKey,
+		AssetAmount:   assetAmount,
+		SuggestedExchangeRate: ExchangeRate{
+			ScaledRate:      scaledExchangeRate,
+			ScalingExponent: exchangeRateScalingExponent,
+		},
 	}, nil
 }
 
 // Validate ensures that the quote request is valid.
-func (q *QuoteRequestMsgData) Validate() error {
+func (q *RequestMsgData) Validate() error {
 	if q.AssetID == nil && q.AssetGroupKey == nil {
 		return fmt.Errorf("asset id and group key cannot both be nil")
 	}
@@ -166,30 +180,37 @@ func (q *QuoteRequestMsgData) Validate() error {
 
 // EncodeRecords determines the non-nil records to include when encoding an
 // at runtime.
-func (q *QuoteRequestMsgData) encodeRecords() []tlv.Record {
+func (q *RequestMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
-	records = append(records, TypeRecordRequestDataID(&q.ID))
+	records = append(records, TypeRecordRequestID(&q.ID))
 
 	if q.AssetID != nil {
-		records = append(records, TypeRecordRequestDataAssetID(&q.AssetID))
+		records = append(records, TypeRecordRequestAssetID(&q.AssetID))
 	}
 
 	if q.AssetGroupKey != nil {
-		record := TypeRecordRequestDataGroupKey(&q.AssetGroupKey)
+		record := TypeRecordRequestAssetGroupKey(&q.AssetGroupKey)
 		records = append(records, record)
 	}
 
-	records = append(records, TypeRecordRequestDataAssetAmount(&q.AssetAmount))
+	records = append(records, TypeRecordRequestAssetAmount(&q.AssetAmount))
 
-	record := TypeRecordRequestDataAmtCharacteristic(&q.AmtCharacteristic)
-	records = append(records, record)
+	scaledRateRecord := TypeRecordRequestScaledExchangeRate(
+		&q.SuggestedExchangeRate.ScaledRate,
+	)
+	records = append(records, scaledRateRecord)
+
+	scalingExponentRecord := TypeRecordRequestExchangeRateScalingExponent(
+		&q.SuggestedExchangeRate.ScalingExponent,
+	)
+	records = append(records, scalingExponentRecord)
 
 	return records
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *QuoteRequestMsgData) Encode(writer io.Writer) error {
+func (q *RequestMsgData) Encode(writer io.Writer) error {
 	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
@@ -198,7 +219,7 @@ func (q *QuoteRequestMsgData) Encode(writer io.Writer) error {
 }
 
 // Bytes encodes the structure into a TLV stream and returns the bytes.
-func (q *QuoteRequestMsgData) Bytes() ([]byte, error) {
+func (q *RequestMsgData) Bytes() ([]byte, error) {
 	var b bytes.Buffer
 	err := q.Encode(&b)
 	if err != nil {
@@ -209,18 +230,23 @@ func (q *QuoteRequestMsgData) Bytes() ([]byte, error) {
 }
 
 // DecodeRecords provides all TLV records for decoding.
-func (q *QuoteRequestMsgData) decodeRecords() []tlv.Record {
+func (q *RequestMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
-		TypeRecordRequestDataID(&q.ID),
-		TypeRecordRequestDataAssetID(&q.AssetID),
-		TypeRecordRequestDataGroupKey(&q.AssetGroupKey),
-		TypeRecordRequestDataAssetAmount(&q.AssetAmount),
-		TypeRecordRequestDataAmtCharacteristic(&q.AmtCharacteristic),
+		TypeRecordRequestID(&q.ID),
+		TypeRecordRequestAssetID(&q.AssetID),
+		TypeRecordRequestAssetGroupKey(&q.AssetGroupKey),
+		TypeRecordRequestAssetAmount(&q.AssetAmount),
+		TypeRecordRequestScaledExchangeRate(
+			&q.SuggestedExchangeRate.ScaledRate,
+		),
+		TypeRecordRequestExchangeRateScalingExponent(
+			&q.SuggestedExchangeRate.ScalingExponent,
+		),
 	}
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *QuoteRequestMsgData) Decode(r io.Reader) error {
+func (q *RequestMsgData) Decode(r io.Reader) error {
 	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
@@ -228,32 +254,32 @@ func (q *QuoteRequestMsgData) Decode(r io.Reader) error {
 	return stream.Decode(r)
 }
 
-// QuoteRequest is a struct that represents a request for a quote (RFQ).
-type QuoteRequest struct {
+// Request is a struct that represents a request for a quote (RFQ).
+type Request struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// QuoteRequestMsgData is the message data for the quote request
+	// RequestMsgData is the message data for the quote request
 	// message.
-	QuoteRequestMsgData
+	RequestMsgData
 }
 
 // Validate ensures that the quote request is valid.
-func (q *QuoteRequest) Validate() error {
-	return q.QuoteRequestMsgData.Validate()
+func (q *Request) Validate() error {
+	return q.RequestMsgData.Validate()
 }
 
 // NewQuoteRequestFromWireMsg instantiates a new instance from a wire message.
-func NewQuoteRequestFromWireMsg(wireMsg WireMessage) (*QuoteRequest, error) {
+func NewQuoteRequestFromWireMsg(wireMsg WireMessage) (*Request, error) {
 	msgData, err := NewQuoteRequestMsgDataFromBytes(wireMsg.Data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote "+
 			"request message data: %w", err)
 	}
 
-	quoteRequest := QuoteRequest{
-		Peer:                wireMsg.Peer,
-		QuoteRequestMsgData: *msgData,
+	quoteRequest := Request{
+		Peer:           wireMsg.Peer,
+		RequestMsgData: *msgData,
 	}
 
 	// Perform basic sanity checks on the quote request.
@@ -267,10 +293,10 @@ func NewQuoteRequestFromWireMsg(wireMsg WireMessage) (*QuoteRequest, error) {
 }
 
 // ToWire returns a wire message with a serialized data field.
-func (q *QuoteRequest) ToWire() (WireMessage, error) {
+func (q *Request) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
-	err := q.QuoteRequestMsgData.Encode(buff)
+	err := q.RequestMsgData.Encode(buff)
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
@@ -285,4 +311,4 @@ func (q *QuoteRequest) ToWire() (WireMessage, error) {
 }
 
 // Ensure that the message type implements the OutgoingMessage interface.
-var _ OutgoingMessage = (*QuoteRequest)(nil)
+var _ OutgoingMessage = (*Request)(nil)
