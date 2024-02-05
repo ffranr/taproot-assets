@@ -53,6 +53,15 @@ type OutgoingMessage interface {
 }
 
 // ExchangeRate is a struct that represents an asset exchange rate.
+//
+// TODO(ffranr): This field should just be a "price" in sats. We check for the
+// full price amount in the HTLC. The exchange rate is not the same as the
+// "price". By "price" I mean "ask". The "suggested exchange rate" is the
+// "bid", and should be renamed as such.
+//
+// Using "exchange rate" or "tick rate" is misleading. Because the ask price
+// relates to the amount of asset requested, and maybe does not apply to
+// a different amount of the asset.
 type ExchangeRate struct {
 	// ScaledRate is the exchange rate scaled by ScalingExponent.
 	ScaledRate uint64
