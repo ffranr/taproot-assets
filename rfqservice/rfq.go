@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lightninglabs/taproot-assets/fn"
-	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
 
 const (
@@ -57,6 +57,14 @@ type Manager struct {
 	// whether a quote is accepted or rejected.
 	negotiator *Negotiator
 
+	// incomingMessages is a channel which is populated with incoming
+	// messages.
+	incomingMessages chan rfqmsg.IncomingMsg
+
+	// outgoingMessages is a channel which is populated with outgoing
+	// messages.
+	outgoingMessages chan rfqmsg.OutgoingMsg
+
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
 	*fn.ContextGuard
@@ -66,11 +74,67 @@ type Manager struct {
 func NewManager(cfg ManagerCfg) (Manager, error) {
 	return Manager{
 		cfg: cfg,
+
+		incomingMessages: make(chan rfqmsg.IncomingMsg),
+		outgoingMessages: make(chan rfqmsg.OutgoingMsg),
+
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
 			Quit:           make(chan struct{}),
 		},
 	}, nil
+}
+
+// startSubsystems starts the RFQ subsystems.
+func (m *Manager) startSubsystems(ctx context.Context) error {
+	var err error
+
+	// Initialise and start the order handler.
+	m.orderHandler, err = NewOrderHandler(OrderHandlerCfg{
+		CleanupInterval: CacheCleanupInterval,
+		HtlcInterceptor: m.cfg.HtlcInterceptor,
+	})
+	if err != nil {
+		return fmt.Errorf("error initializing RFQ order handler: %w",
+			err)
+	}
+
+	if err := m.orderHandler.Start(); err != nil {
+		return fmt.Errorf("unable to start RFQ order handler: %w", err)
+	}
+
+	// Initialise and start the peer message stream handler.
+	streamHandlerCfg := StreamHandlerCfg{
+		PeerMessagePorter: m.cfg.PeerMessagePorter,
+	}
+	m.streamHandler, err = NewStreamHandler(
+		ctx, streamHandlerCfg, m.incomingMessages,
+	)
+	if err != nil {
+		return fmt.Errorf("error initializing RFQ subsystem service: "+
+			"peer message stream handler: %w", err)
+	}
+
+	if err := m.streamHandler.Start(); err != nil {
+		return fmt.Errorf("unable to start RFQ subsystem service: "+
+			"peer message stream handler: %w", err)
+	}
+
+	// Initialise and start the quote negotiator.
+	negotiatorCfg := NegotiatorCfg{
+		PriceOracle: m.cfg.PriceOracle,
+	}
+	m.negotiator, err = NewNegotiator(negotiatorCfg, m.outgoingMessages)
+	if err != nil {
+		return fmt.Errorf("error initializing RFQ negotiator: %w",
+			err)
+	}
+
+	if err := m.negotiator.Start(); err != nil {
+		return fmt.Errorf("unable to start RFQ negotiator: %w", err)
+	}
+
+	return err
 }
 
 // Start attempts to start a new RFQ manager.
@@ -124,58 +188,16 @@ func (m *Manager) Stop() error {
 	return stopErr
 }
 
-// startSubsystems starts the RFQ subsystems.
-func (m *Manager) startSubsystems(ctx context.Context) error {
-	var err error
-
-	// Initialise and start the order handler.
-	m.orderHandler, err = NewOrderHandler(OrderHandlerCfg{
-		CleanupInterval: CacheCleanupInterval,
-		HtlcInterceptor: m.cfg.HtlcInterceptor,
-	})
-	if err != nil {
-		return fmt.Errorf("error initializing RFQ order handler: %w",
-			err)
-	}
-
-	if err := m.orderHandler.Start(); err != nil {
-		return fmt.Errorf("unable to start RFQ order handler: %w", err)
-	}
-
-	// Initialise and start the peer message stream handler.
-	m.streamHandler, err = NewStreamHandler(
-		ctx, m.cfg.PeerMessagePorter,
-	)
-	if err != nil {
-		return fmt.Errorf("error initializing RFQ subsystem service: "+
-			"peer message stream handler: %w", err)
-	}
-
-	if err := m.streamHandler.Start(); err != nil {
-		return fmt.Errorf("unable to start RFQ subsystem service: "+
-			"peer message stream handler: %w", err)
-	}
-
-	// Initialise and start the quote negotiator.
-	m.negotiator, err = NewNegotiator(NegotiatorCfg{
-		PriceOracle: m.cfg.PriceOracle,
-	})
-	if err != nil {
-		return fmt.Errorf("error initializing RFQ negotiator: %w",
-			err)
-	}
-
-	if err := m.negotiator.Start(); err != nil {
-		return fmt.Errorf("unable to start RFQ negotiator: %w", err)
-	}
-
-	return err
-}
-
 // stopSubsystems stops the RFQ subsystems.
 func (m *Manager) stopSubsystems() error {
+	// Stop the RFQ order handler.
+	err := m.orderHandler.Stop()
+	if err != nil {
+		return fmt.Errorf("error stopping RFQ order handler: %w", err)
+	}
+
 	// Stop the RFQ stream handler.
-	err := m.streamHandler.Stop()
+	err = m.streamHandler.Stop()
 	if err != nil {
 		return fmt.Errorf("error stopping RFQ stream handler: %w", err)
 	}
@@ -190,29 +212,41 @@ func (m *Manager) stopSubsystems() error {
 	return nil
 }
 
-// handleIncomingQuoteRequest handles an incoming quote request.
-func (m *Manager) handleIncomingQuoteRequest(quoteReq msg.Request) error {
-	// Forward the incoming quote request to the quote negotiator so that
-	// it may determine whether the quote should be accepted or rejected.
-	err := m.negotiator.HandleIncomingQuoteRequest(quoteReq)
-	if err != nil {
-		return fmt.Errorf("error handling incoming quote request: %w",
-			err)
+// handleIncomingMessage handles an incoming message.
+func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
+	// Perform type specific handling of the incoming message.
+	//
+	// TODO(ffranr): handle incoming accept and reject messages.
+	switch msg := incomingMsg.(type) {
+	case *rfqmsg.Request:
+		err := m.negotiator.HandleIncomingQuoteRequest(*msg)
+		if err != nil {
+			return fmt.Errorf("error handling incoming quote request: %w",
+				err)
+		}
 	}
 
 	return nil
 }
 
-// handleOutgoingQuoteAccept handles an outgoing quote accept message.
-func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.Accept) error {
-	// Inform the HTLC order handler that we've accepted the quote request.
-	//m.orderHandler.RegisterChannelRemit(quoteAccept)
+// handleOutgoingMessage handles an outgoing message.
+func (m *Manager) handleOutgoingMessage(outgoingMsg rfqmsg.OutgoingMsg) error {
+	// Perform type specific handling of the outgoing message.
+	switch msg := outgoingMsg.(type) {
+	case *rfqmsg.Accept:
+		// Inform the HTLC order handler that we've accepted the quote request.
+		// TODO(ffranr): set the asset amount correctly
+		err := m.orderHandler.RegisterChannelRemit(42, *msg)
+		if err != nil {
+			return fmt.Errorf("error registering channel remit: %w", err)
+		}
+	}
 
-	// Send the quote accept message to the peer.
-	err := m.streamHandler.HandleOutgoingMessage(&quoteAccept)
+	// Send the outgoing message to the peer.
+	err := m.streamHandler.HandleOutgoingMessage(outgoingMsg)
 	if err != nil {
-		return fmt.Errorf("error handling outgoing quote accept: %w",
-			err)
+		return fmt.Errorf("error sending outgoing message to stream "+
+			"handler: %w", err)
 	}
 
 	return nil
@@ -220,44 +254,30 @@ func (m *Manager) handleOutgoingQuoteAccept(quoteAccept msg.Accept) error {
 
 // mainEventLoop is the main event loop of the RFQ manager.
 func (m *Manager) mainEventLoop() {
-	// Incoming message channels.
-	incomingQuoteRequests := m.streamHandler.IncomingQuoteRequests.NewItemCreated
-	//incomingQuoteAccept := m.streamHandler.IncomingQuoteRequests.NewItemCreated
-	//incomingQuoteReject := m.streamHandler.IncomingQuoteRequests.NewItemCreated
-
-	// Outgoing message channels.
-	//outgoingQuoteRequest := m.negotiator.AcceptedQuotes.NewItemCreated
-	outgoingQuoteAccept := m.negotiator.AcceptedQuotes.NewItemCreated
-	//outgoingQuoteReject := m.negotiator.AcceptedQuotes.NewItemCreated
-
 	for {
 		select {
-		// Handle incoming (received) quote requests from the peer
-		// message stream handler.
-		case quoteReq := <-incomingQuoteRequests.ChanOut():
-			log.Debugf("RFQ manager has received an incoming " +
-				"quote request")
+		// Handle incoming message.
+		case incomingMsg := <-m.incomingMessages:
+			log.Debugf("RFQ manager has received an incoming message")
 
-			err := m.handleIncomingQuoteRequest(quoteReq)
+			err := m.handleIncomingMessage(incomingMsg)
 			if err != nil {
 				log.Warnf("Error handling incoming quote "+
 					"request: %v", err)
 			}
 
-		// Handle accepted quotes.
-		case acceptedQuote := <-outgoingQuoteAccept.ChanOut():
-			log.Debugf("RFQ manager has received an outgoing " +
-				"quote accept message.")
+		// Handle outgoing message.
+		case outgoingMsg := <-m.outgoingMessages:
+			log.Debugf("RFQ manager has received an outgoing message.")
 
-			err := m.handleOutgoingQuoteAccept(acceptedQuote)
+			err := m.handleOutgoingMessage(outgoingMsg)
 			if err != nil {
-				log.Warnf("Error handling outgoing quote "+
-					"accept: %v", err)
+				log.Warnf("Error handling outgoing message: %v", err)
 			}
 
 		case <-m.Quit:
-			log.Debug("RFQ manager main event loop has received " +
-				"the shutdown signal")
+			log.Debug("RFQ manager main event loop has received the " +
+				"shutdown signal")
 			return
 		}
 	}

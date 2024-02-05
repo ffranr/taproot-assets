@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/lightninglabs/taproot-assets/fn"
-	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
 )
 
 // NegotiatorCfg holds the configuration for the negotiator.
@@ -25,11 +25,9 @@ type Negotiator struct {
 	// cfg holds the configuration parameters for the negotiator.
 	cfg NegotiatorCfg
 
-	// AcceptedQuotes is a channel which is populated with accepted quotes.
-	AcceptedQuotes *fn.EventReceiver[msg.Accept]
-
-	// RejectedQuotes is a channel which is populated with rejected quotes.
-	RejectedQuotes *fn.EventReceiver[msg.Reject]
+	// outgoingMessages is a channel which is populated with outgoing peer
+	// messages.
+	outgoingMessages chan<- rfqmsg.OutgoingMsg
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
@@ -37,20 +35,12 @@ type Negotiator struct {
 }
 
 // NewNegotiator creates a new quote negotiator.
-func NewNegotiator(cfg NegotiatorCfg) (*Negotiator, error) {
-	acceptedQuotes := fn.NewEventReceiver[msg.Accept](
-		fn.DefaultQueueSize,
-	)
-	rejectedQuotes := fn.NewEventReceiver[msg.Reject](
-		fn.DefaultQueueSize,
-	)
+func NewNegotiator(cfg NegotiatorCfg,
+	outgoingMessages chan<- rfqmsg.OutgoingMsg) (*Negotiator, error) {
 
 	return &Negotiator{
-		cfg: cfg,
-
-		AcceptedQuotes: acceptedQuotes,
-		RejectedQuotes: rejectedQuotes,
-
+		cfg:              cfg,
+		outgoingMessages: outgoingMessages,
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
 			Quit:           make(chan struct{}),
@@ -59,10 +49,8 @@ func NewNegotiator(cfg NegotiatorCfg) (*Negotiator, error) {
 }
 
 // queryPriceOracle queries the price oracle for the asking price.
-//
-// NOTE: This method must be thread-safe.
 func (n *Negotiator) queryPriceOracle(
-	req msg.Request) (*PriceOracleSuggestedRate, error) {
+	req rfqmsg.Request) (*PriceOracleSuggestedRate, error) {
 
 	ctx, cancel := n.WithCtxQuitNoTimeout()
 	defer cancel()
@@ -80,17 +68,15 @@ func (n *Negotiator) queryPriceOracle(
 
 // handlePriceOracleResponse handles the response from the price oracle.
 func (n *Negotiator) handlePriceOracleResponse(
-	req msg.Request, res *PriceOracleSuggestedRate) error {
+	req rfqmsg.Request, res *PriceOracleSuggestedRate) error {
 
 	// If the suggested rate is nil, then we will return the error message
 	// supplied by the price oracle.
 	if res.SuggestedRate == nil {
-		rejectMsg := msg.NewQuoteReject(req.Peer, req.ID, res.Err)
+		rejectMsg := rfqmsg.NewRejectMsg(req.Peer, req.ID, res.Err)
+		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
-		sendSuccess := fn.SendOrQuit(
-			n.RejectedQuotes.NewItemCreated.ChanIn(), rejectMsg,
-			n.Quit,
-		)
+		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
 		if !sendSuccess {
 			return fmt.Errorf("negotiator failed to send reject " +
 				"message")
@@ -100,15 +86,14 @@ func (n *Negotiator) handlePriceOracleResponse(
 	// If the suggested rate is not nil, then we can proceed to respond
 	// with an accept message.
 	var sig [64]byte
-	acceptMsg := msg.NewQuoteAccept(
+	acceptMsg := rfqmsg.NewAcceptMsg(
 		req.Peer, req.ID, res.SuggestedRate.ScaledRate, res.Expiry, sig,
 	)
+	var msg rfqmsg.OutgoingMsg = &acceptMsg
 
-	sendSuccess := fn.SendOrQuit(
-		n.AcceptedQuotes.NewItemCreated.ChanIn(), acceptMsg, n.Quit,
-	)
+	sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
 	if !sendSuccess {
-		return fmt.Errorf("negotiator failed populate accept message " +
+		return fmt.Errorf("negotiator failed to populate accept message " +
 			"channel")
 	}
 
@@ -116,26 +101,23 @@ func (n *Negotiator) handlePriceOracleResponse(
 }
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
-func (n *Negotiator) HandleIncomingQuoteRequest(req msg.Request) error {
-	// If there is no price oracle, then we cannot proceed with the
+func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
+	// If there is no price oracle available, then we cannot proceed with the
 	// negotiation. We will reject the quote request with an error.
 	if n.cfg.PriceOracle == nil {
-		rejectMsg := msg.NewQuoteReject(
-			req.Peer, req.ID, msg.ErrPriceOracleUnavailable,
+		rejectMsg := rfqmsg.NewRejectMsg(
+			req.Peer, req.ID, rfqmsg.ErrPriceOracleUnavailable,
 		)
+		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
-		sendSuccess := fn.SendOrQuit(
-			n.RejectedQuotes.NewItemCreated.ChanIn(), rejectMsg,
-			n.Quit,
-		)
+		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
 		if !sendSuccess {
-			return fmt.Errorf("negotiator failed to send reject " +
-				"message")
+			return fmt.Errorf("negotiator failed to send reject message")
 		}
 	}
 
-	// Query the price oracle in a separate goroutine in case it is a
-	// remote service and takes a long time to respond.
+	// Query the price oracle in a separate goroutine in case it is a remote
+	// service and takes a long time to respond.
 	n.Wg.Add(1)
 	go func() {
 		defer n.Wg.Done()

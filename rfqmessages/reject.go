@@ -159,8 +159,8 @@ type Reject struct {
 	RejectMsgData
 }
 
-// NewQuoteReject creates a new instance of a quote reject message.
-func NewQuoteReject(peer route.Vertex, id ID, rejectErr RejectErr) Reject {
+// NewRejectMsg creates a new instance of a quote reject message.
+func NewRejectMsg(peer route.Vertex, id ID, rejectErr RejectErr) Reject {
 	return Reject{
 		Peer: peer,
 		RejectMsgData: RejectMsgData{
@@ -204,5 +204,8 @@ func (q *Reject) ToWire() (WireMessage, error) {
 	}, nil
 }
 
-// Ensure that the message type implements the OutgoingMessage interface.
-var _ OutgoingMessage = (*Reject)(nil)
+// Ensure that the message type implements the OutgoingMsg interface.
+var _ OutgoingMsg = (*Reject)(nil)
+
+// Ensure that the message type implements the IncomingMsg interface.
+var _ IncomingMsg = (*Reject)(nil)

@@ -45,9 +45,14 @@ type WireMessage struct {
 	Data []byte
 }
 
-// OutgoingMessage is an interface that represents an outbound wire message
+// IncomingMsg is an interface that represents an inbound wire message
+// that has been received from a peer.
+type IncomingMsg interface {
+}
+
+// OutgoingMsg is an interface that represents an outbound wire message
 // that can be sent to a peer.
-type OutgoingMessage interface {
+type OutgoingMsg interface {
 	// ToWire returns a wire message with a serialized data field.
 	ToWire() (WireMessage, error)
 }

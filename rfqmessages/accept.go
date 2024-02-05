@@ -68,9 +68,9 @@ func TypeRecordAcceptSig(sig *[64]byte) tlv.Record {
 	)
 }
 
-// AcceptMsgData is a struct that represents the data field of a quote
+// acceptMsgData is a struct that represents the data field of a quote
 // accept message.
-type AcceptMsgData struct {
+type acceptMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
@@ -84,9 +84,9 @@ type AcceptMsgData struct {
 	sig [64]byte
 }
 
-// EncodeRecords determines the non-nil records to include when encoding at
+// encodeRecords determines the non-nil records to include when encoding at
 // runtime.
-func (q *AcceptMsgData) encodeRecords() []tlv.Record {
+func (q *acceptMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
 	// Add ID record.
@@ -109,7 +109,7 @@ func (q *AcceptMsgData) encodeRecords() []tlv.Record {
 }
 
 // Encode encodes the structure into a TLV stream.
-func (q *AcceptMsgData) Encode(writer io.Writer) error {
+func (q *acceptMsgData) Encode(writer io.Writer) error {
 	stream, err := tlv.NewStream(q.encodeRecords()...)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (q *AcceptMsgData) Encode(writer io.Writer) error {
 }
 
 // DecodeRecords provides all TLV records for decoding.
-func (q *AcceptMsgData) decodeRecords() []tlv.Record {
+func (q *acceptMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordAcceptID(&q.ID),
 		TypeRecordAcceptAskingPrice(&q.AskingPrice),
@@ -128,7 +128,7 @@ func (q *AcceptMsgData) decodeRecords() []tlv.Record {
 }
 
 // Decode decodes the structure from a TLV stream.
-func (q *AcceptMsgData) Decode(r io.Reader) error {
+func (q *acceptMsgData) Decode(r io.Reader) error {
 	stream, err := tlv.NewStream(q.decodeRecords()...)
 	if err != nil {
 		return err
@@ -141,16 +141,21 @@ type Accept struct {
 	// Peer is the peer that sent the quote request.
 	Peer route.Vertex
 
-	// AcceptMsgData is the message data for the quote accept message.
-	AcceptMsgData
+	// AssetAmount is the amount of the asset that the accept message
+	// is for.
+	AssetAmount uint64
+
+	// acceptMsgData is the message data for the quote accept message.
+	acceptMsgData
 }
 
-// NewQuoteAccept creates a new instance of a quote accept message.
-func NewQuoteAccept(peer route.Vertex, id ID, askingPrice uint64,
+// NewAcceptMsg creates a new instance of a quote accept message.
+func NewAcceptMsg(peer route.Vertex, id ID, askingPrice uint64,
 	expirySeconds uint64, sig [64]byte) Accept {
+
 	return Accept{
 		Peer: peer,
-		AcceptMsgData: AcceptMsgData{
+		acceptMsgData: acceptMsgData{
 			ID:            id,
 			AskingPrice:   lnwire.MilliSatoshi(askingPrice),
 			ExpirySeconds: expirySeconds,
@@ -162,7 +167,7 @@ func NewQuoteAccept(peer route.Vertex, id ID, askingPrice uint64,
 // NewQuoteAcceptFromWireMsg instantiates a new instance from a wire message.
 func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*Accept, error) {
 	// Decode message data component from TLV bytes.
-	var msgData AcceptMsgData
+	var msgData acceptMsgData
 	err := msgData.Decode(bytes.NewReader(wireMsg.Data))
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote accept "+
@@ -171,7 +176,7 @@ func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*Accept, error) {
 
 	return &Accept{
 		Peer:          wireMsg.Peer,
-		AcceptMsgData: msgData,
+		acceptMsgData: msgData,
 	}, nil
 }
 
@@ -195,7 +200,7 @@ func (q *Accept) ShortChannelId() SerialisedScid {
 func (q *Accept) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
 	var buff *bytes.Buffer
-	err := q.AcceptMsgData.Encode(buff)
+	err := q.acceptMsgData.Encode(buff)
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
@@ -209,5 +214,8 @@ func (q *Accept) ToWire() (WireMessage, error) {
 	}, nil
 }
 
-// Ensure that the message type implements the OutgoingMessage interface.
-var _ OutgoingMessage = (*Accept)(nil)
+// Ensure that the message type implements the OutgoingMsg interface.
+var _ OutgoingMsg = (*Accept)(nil)
+
+// Ensure that the message type implements the IncomingMsg interface.
+var _ IncomingMsg = (*Accept)(nil)

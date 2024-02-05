@@ -264,13 +264,8 @@ type Request struct {
 	RequestMsgData
 }
 
-// Validate ensures that the quote request is valid.
-func (q *Request) Validate() error {
-	return q.RequestMsgData.Validate()
-}
-
-// NewQuoteRequestFromWireMsg instantiates a new instance from a wire message.
-func NewQuoteRequestFromWireMsg(wireMsg WireMessage) (*Request, error) {
+// NewRequestMsgFromWire instantiates a new instance from a wire message.
+func NewRequestMsgFromWire(wireMsg WireMessage) (*Request, error) {
 	msgData, err := NewQuoteRequestMsgDataFromBytes(wireMsg.Data)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode quote "+
@@ -292,6 +287,11 @@ func NewQuoteRequestFromWireMsg(wireMsg WireMessage) (*Request, error) {
 	return &quoteRequest, nil
 }
 
+// Validate ensures that the quote request is valid.
+func (q *Request) Validate() error {
+	return q.RequestMsgData.Validate()
+}
+
 // ToWire returns a wire message with a serialized data field.
 func (q *Request) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
@@ -310,5 +310,8 @@ func (q *Request) ToWire() (WireMessage, error) {
 	}, nil
 }
 
-// Ensure that the message type implements the OutgoingMessage interface.
-var _ OutgoingMessage = (*Request)(nil)
+// Ensure that the message type implements the OutgoingMsg interface.
+var _ OutgoingMsg = (*Request)(nil)
+
+// Ensure that the message type implements the IncomingMsg interface.
+var _ IncomingMsg = (*Request)(nil)

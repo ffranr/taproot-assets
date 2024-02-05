@@ -8,7 +8,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
-	msg "github.com/lightninglabs/taproot-assets/rfqmessages"
+	rfqmsg "github.com/lightninglabs/taproot-assets/rfqmessages"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -26,13 +26,13 @@ type PriceOracleSuggestedRate struct {
 	AssetAmount uint64
 
 	// SuggestedRate is the suggested exchange rate.
-	SuggestedRate *msg.ExchangeRate
+	SuggestedRate *rfqmsg.ExchangeRate
 
 	// Expiry is the suggested rate expiry lifetime unix timestamp.
 	Expiry uint64
 
 	// Err is the error returned by the price oracle service.
-	Err msg.RejectErr
+	Err rfqmsg.RejectErr
 }
 
 // PriceOracle is an interface that provides exchange rate information for
@@ -41,7 +41,7 @@ type PriceOracle interface {
 	// QueryAskingPrice returns the asking price for the given asset amount.
 	QueryAskingPrice(ctx context.Context, assetId *asset.ID,
 		assetGroupKey *btcec.PublicKey, assetAmount uint64,
-		suggestedRate *msg.ExchangeRate) (*PriceOracleSuggestedRate,
+		suggestedRate *rfqmsg.ExchangeRate) (*PriceOracleSuggestedRate,
 		error)
 }
 
@@ -84,7 +84,7 @@ func NewRpcPriceOracle(addr url.URL) (*RpcPriceOracle, error) {
 // QueryAskingPrice returns the asking price for the given asset amount.
 func (r *RpcPriceOracle) QueryAskingPrice(ctx context.Context,
 	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	suggestedRate *msg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
+	suggestedRate *rfqmsg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
 
 	//// Call the external oracle service to get the exchange rate.
 	//conn := getClientConn(ctx, false)
@@ -111,7 +111,7 @@ func NewMockPriceOracle(rateLifetime uint64) *MockPriceOracle {
 // QueryAskingPrice returns the asking price for the given asset amount.
 func (m *MockPriceOracle) QueryAskingPrice(_ context.Context,
 	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmt uint64,
-	suggestedRate *msg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
+	suggestedRate *rfqmsg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
 
 	// Calculate the rate expiry lifetime.
 	expiry := uint64(time.Now().Unix()) + m.rateLifetime
