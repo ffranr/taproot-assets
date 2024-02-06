@@ -4510,6 +4510,49 @@ func (r *rpcServer) RemoveUTXOLease(ctx context.Context,
 	return &wrpc.RemoveUTXOLeaseResponse{}, nil
 }
 
+//func (r *rpcServer) UpsertAssetSellOffer(ctx context.Context,
+//	in *taprpc.BurnAssetRequest) (*taprpc.BurnAssetResponse, error) {
+//
+//	var assetID asset.ID
+//	switch {
+//	case len(in.GetAssetId()) > 0:
+//		copy(assetID[:], in.GetAssetId())
+//
+//	case len(in.GetAssetIdStr()) > 0:
+//		assetIDBytes, err := hex.DecodeString(in.GetAssetIdStr())
+//		if err != nil {
+//			return nil, fmt.Errorf("error decoding asset ID: %w",
+//				err)
+//		}
+//
+//		copy(assetID[:], assetIDBytes)
+//
+//	default:
+//		return nil, fmt.Errorf("asset ID must be specified")
+//	}
+//
+//	var groupKey *btcec.PublicKey
+//	assetGroup, err := r.cfg.TapAddrBook.QueryAssetGroup(ctx, assetID)
+//	switch {
+//	case err == nil && assetGroup.GroupKey != nil:
+//		// We found the asset group, so we can use the group key to
+//		// burn the asset.
+//		groupKey = &assetGroup.GroupPubKey
+//	case errors.Is(err, address.ErrAssetGroupUnknown):
+//		// We don't know the asset group, so we'll try to burn the
+//		// asset using the asset ID only.
+//		rpcsLog.Debug("Asset group key not found, asset may not be " +
+//			"part of a group")
+//	case err != nil:
+//		return nil, fmt.Errorf("error querying asset group: %w", err)
+//	}
+//
+//	var serializedGroupKey []byte
+//	if groupKey != nil {
+//		serializedGroupKey = groupKey.SerializeCompressed()
+//	}
+//}
+
 // MarshalAssetFedSyncCfg returns an RPC ready asset specific federation sync
 // config.
 func MarshalAssetFedSyncCfg(

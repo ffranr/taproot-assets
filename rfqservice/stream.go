@@ -89,9 +89,6 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 			"from a wire message: %w", err)
 	}
 
-	// TODO(ffranr): Determine whether to keep or discard the RFQ message
-	//  based on the peer's ID and the asset's ID.
-
 	// Send the quote request to the RFQ manager.
 	var msg rfqmsg.IncomingMsg = quoteRequest
 	sendSuccess := fn.SendOrQuit(h.incomingMessages, msg, h.Quit)

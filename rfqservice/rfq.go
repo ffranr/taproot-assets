@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
 )
@@ -288,4 +290,28 @@ func (m *Manager) mainEventLoop() {
 			return
 		}
 	}
+}
+
+// UpsertAssetSellOffer upserts an asset sell offer with the RFQ manager.
+func (m *Manager) UpsertAssetSellOffer(offer AssetSellOffer) error {
+	// Store the asset sell offer in the negotiator.
+	err := m.negotiator.UpsertAssetSellOffer(offer)
+	if err != nil {
+		return fmt.Errorf("error registering asset sell offer: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveAssetSellOffer removes an asset sell offer from the RFQ manager.
+func (m *Manager) RemoveAssetSellOffer(assetID *asset.ID,
+	assetGroupKey *btcec.PublicKey) error {
+
+	// Remove the asset sell offer from the negotiator.
+	err := m.negotiator.RemoveAssetSellOffer(assetID, assetGroupKey)
+	if err != nil {
+		return fmt.Errorf("error removing asset sell offer: %w", err)
+	}
+
+	return nil
 }

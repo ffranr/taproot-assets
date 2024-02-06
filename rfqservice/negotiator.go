@@ -1,9 +1,12 @@
 package rfqservice
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sync"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
 )
@@ -27,6 +30,12 @@ type Negotiator struct {
 	// outgoingMessages is a channel which is populated with outgoing peer
 	// messages.
 	outgoingMessages chan<- rfqmsg.OutgoingMsg
+
+	// assetSellOffers is a map (keyed on asset) that holds the asset sell
+	// offers that the negotiator has received.
+	assetSellOffers map[string]AssetSellOffer
+
+	assetGroupSellOffers map[string]AssetSellOffer
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
@@ -104,6 +113,9 @@ func (n *Negotiator) handlePriceOracleResponse(request rfqmsg.Request,
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
 func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
+	// Ensure that we have a sell offer for the asset that is being
+	// requested.
+
 	// If there is no price oracle available, then we cannot proceed with
 	// the negotiation. We will reject the quote request with an error.
 	if n.cfg.PriceOracle == nil {
@@ -137,6 +149,90 @@ func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
 				"response: %v", err)
 		}
 	}()
+
+	return nil
+}
+
+// AssetSellOffer is a struct that represents an asset sell offer. This
+// data structure describes the maximum amount of an asset that is available
+// for sale.
+type AssetSellOffer struct {
+	// AssetID represents the identifier of the subject asset.
+	AssetID *asset.ID
+
+	// AssetGroupKey is the public group key of the subject asset.
+	AssetGroupKey *btcec.PublicKey
+
+	// MaxAssetAmount is the maximum amount of the asset under offer.
+	MaxAssetAmount uint64
+}
+
+// Validate validates the asset sell offer.
+func (a *AssetSellOffer) Validate() error {
+	if a.AssetID == nil && a.AssetGroupKey == nil {
+		return fmt.Errorf("asset ID is nil and asset group key is nil")
+	}
+
+	if a.AssetID != nil && a.AssetGroupKey != nil {
+		return fmt.Errorf("asset ID and asset group key are both set")
+	}
+
+	if a.MaxAssetAmount == 0 {
+		return fmt.Errorf("max asset amount is zero")
+	}
+
+	return nil
+}
+
+// UpsertAssetSellOffer upserts an asset sell offer with the negotiator.
+func (n *Negotiator) UpsertAssetSellOffer(offer AssetSellOffer) error {
+	// Validate the offer.
+	err := offer.Validate()
+	if err != nil {
+		return fmt.Errorf("invalid asset sell offer: %w", err)
+	}
+
+	// Store the offer in the appropriate map.
+	//
+	// If the asset group key is not nil, then we will use it as the key for
+	// the offer. Otherwise, we will use the asset ID as the key.
+	switch {
+	case offer.AssetGroupKey != nil:
+		compressedKey := offer.AssetGroupKey.SerializeCompressed()
+		keyStr := hex.EncodeToString(compressedKey)
+
+		n.assetGroupSellOffers[keyStr] = offer
+
+	case offer.AssetID != nil:
+		idStr := offer.AssetID.String()
+		n.assetSellOffers[idStr] = offer
+	}
+
+	return nil
+}
+
+// RemoveAssetSellOffer removes an asset sell offer from the negotiator.
+func (n *Negotiator) RemoveAssetSellOffer(assetID *asset.ID,
+	assetGroupKey *btcec.PublicKey) error {
+
+	// Remove the offer from the appropriate map.
+	//
+	// If the asset group key is not nil, then we will use it as the key for
+	// the offer. Otherwise, we will use the asset ID as the key.
+	switch {
+	case assetGroupKey != nil:
+		compressedKey := assetGroupKey.SerializeCompressed()
+		keyStr := hex.EncodeToString(compressedKey)
+
+		delete(n.assetGroupSellOffers, keyStr)
+
+	case assetID != nil:
+		idStr := assetID.String()
+		delete(n.assetSellOffers, idStr)
+
+	default:
+		return fmt.Errorf("asset ID and asset group key are both nil")
+	}
 
 	return nil
 }

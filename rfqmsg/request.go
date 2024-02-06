@@ -102,7 +102,7 @@ type requestMsgData struct {
 	// ID is the unique identifier of the request for quote (RFQ).
 	ID ID
 
-	// // AssetID represents the identifier of the asset for which the peer
+	// AssetID represents the identifier of the asset for which the peer
 	// is requesting a quote.
 	AssetID *asset.ID
 
