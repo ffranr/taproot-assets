@@ -68,12 +68,14 @@ func (n *Negotiator) queryPriceOracle(
 
 // handlePriceOracleResponse handles the response from the price oracle.
 func (n *Negotiator) handlePriceOracleResponse(
-	req rfqmsg.Request, res *PriceOracleSuggestedRate) error {
+	request rfqmsg.Request, oracleResponse *PriceOracleSuggestedRate) error {
 
 	// If the suggested rate is nil, then we will return the error message
 	// supplied by the price oracle.
-	if res.AskingPrice == nil {
-		rejectMsg := rfqmsg.NewRejectMsg(req.Peer, req.ID, res.Err)
+	if oracleResponse.AskingPrice == nil {
+		rejectMsg := rfqmsg.NewRejectMsg(
+			request.Peer, request.ID, oracleResponse.Err,
+		)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
 		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
@@ -86,8 +88,8 @@ func (n *Negotiator) handlePriceOracleResponse(
 	// If the suggested rate is not nil, then we can proceed to respond
 	// with an accept message.
 	var sig [64]byte
-	acceptMsg := rfqmsg.NewAcceptMsg(
-		req.Peer, req.ID, *res.AskingPrice, res.Expiry, sig,
+	acceptMsg := rfqmsg.NewAcceptFromRequest(
+		request, *oracleResponse.AskingPrice, oracleResponse.Expiry, sig,
 	)
 	var msg rfqmsg.OutgoingMsg = &acceptMsg
 

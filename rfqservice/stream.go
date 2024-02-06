@@ -106,7 +106,7 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 func (h *StreamHandler) handleIncomingQuoteAccept(
 	wireMsg rfqmsg.WireMessage) error {
 
-	quoteAccept, err := rfqmsg.NewQuoteAcceptFromWireMsg(wireMsg)
+	quoteAccept, err := rfqmsg.NewAcceptFromWireMsg(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote accept message "+
 			"from a lndclient custom message: %w", err)

@@ -149,23 +149,25 @@ type Accept struct {
 	acceptMsgData
 }
 
-// NewAcceptMsg creates a new instance of a quote accept message.
-func NewAcceptMsg(peer route.Vertex, id ID, askingPrice lnwire.MilliSatoshi,
+// NewAcceptFromRequest creates a new instance of a quote accept message given
+// a quote request message.
+func NewAcceptFromRequest(request Request, askingPrice lnwire.MilliSatoshi,
 	expiry uint64, sig [64]byte) Accept {
 
 	return Accept{
-		Peer: peer,
+		Peer:        request.Peer,
+		AssetAmount: request.AssetAmount,
 		acceptMsgData: acceptMsgData{
-			ID:          id,
-			AskingPrice: lnwire.MilliSatoshi(askingPrice),
+			ID:          request.ID,
+			AskingPrice: askingPrice,
 			Expiry:      expiry,
 			sig:         sig,
 		},
 	}
 }
 
-// NewQuoteAcceptFromWireMsg instantiates a new instance from a wire message.
-func NewQuoteAcceptFromWireMsg(wireMsg WireMessage) (*Accept, error) {
+// NewAcceptFromWireMsg instantiates a new instance from a wire message.
+func NewAcceptFromWireMsg(wireMsg WireMessage) (*Accept, error) {
 	// Decode message data component from TLV bytes.
 	var msgData acceptMsgData
 	err := msgData.Decode(bytes.NewReader(wireMsg.Data))

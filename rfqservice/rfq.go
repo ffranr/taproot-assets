@@ -236,7 +236,7 @@ func (m *Manager) handleOutgoingMessage(outgoingMsg rfqmsg.OutgoingMsg) error {
 	case *rfqmsg.Accept:
 		// Inform the HTLC order handler that we've accepted the quote request.
 		// TODO(ffranr): set the asset amount correctly
-		err := m.orderHandler.RegisterChannelRemit(42, *msg)
+		err := m.orderHandler.RegisterChannelRemit(*msg)
 		if err != nil {
 			return fmt.Errorf("error registering channel remit: %w", err)
 		}

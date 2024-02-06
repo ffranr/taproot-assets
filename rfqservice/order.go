@@ -34,15 +34,13 @@ type ChannelRemit struct {
 }
 
 // NewChannelRemit creates a new channel remit.
-func NewChannelRemit(assetAmount uint64,
-	quoteAccept rfqmsg.Accept) (*ChannelRemit, error) {
-
+func NewChannelRemit(quoteAccept rfqmsg.Accept) (*ChannelRemit, error) {
 	// Compute the serialised short channel ID (SCID) for the channel.
 	scid := SerialisedScid(quoteAccept.ShortChannelId())
 
 	return &ChannelRemit{
 		Scid:                  scid,
-		AssetAmount:           assetAmount,
+		AssetAmount:           quoteAccept.AssetAmount,
 		MinimumChannelPayment: quoteAccept.AskingPrice,
 		Expiry:                quoteAccept.Expiry,
 	}, nil
@@ -227,10 +225,8 @@ func (h *OrderHandler) Start() error {
 
 // RegisterChannelRemit registers a channel management remit. If a remit exists
 // for the channel SCID, it is overwritten.
-func (h *OrderHandler) RegisterChannelRemit(assetAmount uint64,
-	quoteAccept rfqmsg.Accept) error {
-
-	channelRemit, err := NewChannelRemit(assetAmount, quoteAccept)
+func (h *OrderHandler) RegisterChannelRemit(quoteAccept rfqmsg.Accept) error {
+	channelRemit, err := NewChannelRemit(quoteAccept)
 	if err != nil {
 		return fmt.Errorf("unable to create channel remit: %w", err)
 	}
