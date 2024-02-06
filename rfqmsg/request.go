@@ -8,6 +8,7 @@ import (
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/tlv"
 )
@@ -19,7 +20,7 @@ const (
 	TypeRequestAssetID                     tlv.Type = 1
 	TypeRequestAssetGroupKey               tlv.Type = 3
 	TypeRequestAssetAmount                 tlv.Type = 4
-	TypeRequestScaledExchangeRate          tlv.Type = 6
+	TypeRequestBidPrice                    tlv.Type = 6
 	TypeRequestExchangeRateScalingExponent tlv.Type = 8
 )
 
@@ -80,11 +81,10 @@ func TypeRecordRequestAssetAmount(assetAmount *uint64) tlv.Record {
 	return tlv.MakePrimitiveRecord(TypeRequestAssetAmount, assetAmount)
 }
 
-func TypeRecordRequestScaledExchangeRate(
-	scaledExchangeRate *uint64) tlv.Record {
-
-	return tlv.MakePrimitiveRecord(
-		TypeRequestScaledExchangeRate, scaledExchangeRate,
+func TypeRecordRequestBidPrice(bid *lnwire.MilliSatoshi) tlv.Record {
+	return tlv.MakeStaticRecord(
+		TypeRequestBidPrice, bid, 8,
+		milliSatoshiEncoder, milliSatoshiDecoder,
 	)
 }
 
@@ -114,8 +114,8 @@ type requestMsgData struct {
 	// requesting a quote.
 	AssetAmount uint64
 
-	// SuggestedExchangeRate is the suggested exchange rate for the asset.
-	SuggestedExchangeRate ExchangeRate
+	// BidPrice is the peer's proposed bid price for the asset amount.
+	BidPrice lnwire.MilliSatoshi
 }
 
 // Validate ensures that the quote request is valid.
@@ -149,16 +149,7 @@ func (q *requestMsgData) encodeRecords() []tlv.Record {
 	}
 
 	records = append(records, TypeRecordRequestAssetAmount(&q.AssetAmount))
-
-	scaledRateRecord := TypeRecordRequestScaledExchangeRate(
-		&q.SuggestedExchangeRate.ScaledRate,
-	)
-	records = append(records, scaledRateRecord)
-
-	scalingExponentRecord := TypeRecordRequestExchangeRateScalingExponent(
-		&q.SuggestedExchangeRate.ScalingExponent,
-	)
-	records = append(records, scalingExponentRecord)
+	records = append(records, TypeRecordRequestBidPrice(&q.BidPrice))
 
 	return records
 }
@@ -190,12 +181,7 @@ func (q *requestMsgData) decodeRecords() []tlv.Record {
 		TypeRecordRequestAssetID(&q.AssetID),
 		TypeRecordRequestAssetGroupKey(&q.AssetGroupKey),
 		TypeRecordRequestAssetAmount(&q.AssetAmount),
-		TypeRecordRequestScaledExchangeRate(
-			&q.SuggestedExchangeRate.ScaledRate,
-		),
-		TypeRecordRequestExchangeRateScalingExponent(
-			&q.SuggestedExchangeRate.ScalingExponent,
-		),
+		TypeRecordRequestBidPrice(&q.BidPrice),
 	}
 }
 
@@ -221,7 +207,7 @@ type Request struct {
 // NewRequestMsg creates a new instance of a quote request message.
 func NewRequestMsg(peer route.Vertex, id ID, assetID *asset.ID,
 	assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	scaledExchangeRate uint64, exchangeRateScalingExponent uint8) Request {
+	bidPrice lnwire.MilliSatoshi) Request {
 
 	return Request{
 		Peer: peer,
@@ -230,10 +216,7 @@ func NewRequestMsg(peer route.Vertex, id ID, assetID *asset.ID,
 			AssetID:       assetID,
 			AssetGroupKey: assetGroupKey,
 			AssetAmount:   assetAmount,
-			SuggestedExchangeRate: ExchangeRate{
-				ScaledRate:      scaledExchangeRate,
-				ScalingExponent: exchangeRateScalingExponent,
-			},
+			BidPrice:      bidPrice,
 		},
 	}
 }

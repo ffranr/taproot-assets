@@ -57,7 +57,7 @@ func (n *Negotiator) queryPriceOracle(
 
 	res, err := n.cfg.PriceOracle.QueryAskingPrice(
 		ctx, req.AssetID, req.AssetGroupKey, req.AssetAmount,
-		&req.SuggestedExchangeRate,
+		&req.BidPrice,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query price oracle: %w", err)
@@ -72,7 +72,7 @@ func (n *Negotiator) handlePriceOracleResponse(
 
 	// If the suggested rate is nil, then we will return the error message
 	// supplied by the price oracle.
-	if res.SuggestedRate == nil {
+	if res.AskingPrice == nil {
 		rejectMsg := rfqmsg.NewRejectMsg(req.Peer, req.ID, res.Err)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
@@ -87,7 +87,7 @@ func (n *Negotiator) handlePriceOracleResponse(
 	// with an accept message.
 	var sig [64]byte
 	acceptMsg := rfqmsg.NewAcceptMsg(
-		req.Peer, req.ID, res.SuggestedRate.ScaledRate, res.Expiry, sig,
+		req.Peer, req.ID, *res.AskingPrice, res.Expiry, sig,
 	)
 	var msg rfqmsg.OutgoingMsg = &acceptMsg
 

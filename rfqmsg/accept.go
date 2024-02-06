@@ -77,8 +77,8 @@ type acceptMsgData struct {
 	// AskingPrice is the asking price of the quote.
 	AskingPrice lnwire.MilliSatoshi
 
-	// ExpirySeconds is the number of seconds until the quote expires.
-	ExpirySeconds uint64
+	// Expiry is the asking price expiry lifetime unix timestamp.
+	Expiry uint64
 
 	// sig is a signature over the serialized contents of the message.
 	sig [64]byte
@@ -97,7 +97,7 @@ func (q *acceptMsgData) encodeRecords() []tlv.Record {
 
 	// Add expiry record.
 	records = append(
-		records, TypeRecordAcceptExpiry(&q.ExpirySeconds),
+		records, TypeRecordAcceptExpiry(&q.Expiry),
 	)
 
 	// Add signature record.
@@ -122,7 +122,7 @@ func (q *acceptMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordAcceptID(&q.ID),
 		TypeRecordAcceptAskingPrice(&q.AskingPrice),
-		TypeRecordAcceptExpiry(&q.ExpirySeconds),
+		TypeRecordAcceptExpiry(&q.Expiry),
 		TypeRecordAcceptSig(&q.sig),
 	}
 }
@@ -150,16 +150,16 @@ type Accept struct {
 }
 
 // NewAcceptMsg creates a new instance of a quote accept message.
-func NewAcceptMsg(peer route.Vertex, id ID, askingPrice uint64,
-	expirySeconds uint64, sig [64]byte) Accept {
+func NewAcceptMsg(peer route.Vertex, id ID, askingPrice lnwire.MilliSatoshi,
+	expiry uint64, sig [64]byte) Accept {
 
 	return Accept{
 		Peer: peer,
 		acceptMsgData: acceptMsgData{
-			ID:            id,
-			AskingPrice:   lnwire.MilliSatoshi(askingPrice),
-			ExpirySeconds: expirySeconds,
-			sig:           sig,
+			ID:          id,
+			AskingPrice: lnwire.MilliSatoshi(askingPrice),
+			Expiry:      expiry,
+			sig:         sig,
 		},
 	}
 }

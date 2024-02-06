@@ -3,7 +3,6 @@ package rfqservice
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -16,46 +15,6 @@ import (
 // SerialisedScid is a serialised short channel id (SCID).
 type SerialisedScid uint64
 
-const (
-	// defaultExchangeRateScalingExponent is the default exchange rate
-	// base 10 scaling exponent used to scale the exchange rate.
-	defaultExchangeRateScalingExponent = 4
-)
-
-// calcMillisatsFromAssetAmt calculates the corresponding number of
-// millisatoshis given a tap asset amount, scaled exchange rate, and exchange
-// rate scaling exponent.
-func calcMillisatsFromAssetAmt(assetAmount, scaledExchangeRate,
-	exchangeRateScalingExponent uint64) (lnwire.MilliSatoshi, error) {
-
-	// Check for potential overflow in multiplication maxUint64 divided by
-	// 100,000,000 (satoshis in BTC) and then divided by 1,000
-	// (millisatoshis in satoshi).
-	maxUint64 := uint64(math.MaxUint64)
-	maxAssetAmount := maxUint64 / 100000000 / 1000
-
-	if assetAmount > maxAssetAmount {
-		return 0, fmt.Errorf("asset amount too large to avoid overflow")
-	}
-
-	// Convert asset amount to millisatoshis at 1:1 rate.
-	millisats := assetAmount * 100000000 * 1000
-
-	// Adjust for the actual exchange rate.
-	millisats /= scaledExchangeRate
-
-	// Adjust for scaling exponent.
-	for i := uint64(0); i < exchangeRateScalingExponent; i++ {
-		if millisats > maxUint64/10 {
-			return 0, fmt.Errorf("scaling exponent too large to " +
-				"avoid overflow")
-		}
-		millisats *= 10
-	}
-
-	return lnwire.MilliSatoshi(millisats), nil
-}
-
 // ChannelRemit is a struct that holds the terms which determine whether a
 // channel HTLC is accepted or rejected.
 type ChannelRemit struct {
@@ -66,48 +25,26 @@ type ChannelRemit struct {
 	// AssetAmount is the amount of the tap asset that is being requested.
 	AssetAmount uint64
 
-	// ScaledExchangeRate is the scaled BTC to tap asset exchange rate.
-	// This value is scaled by the ExchangeRateScalingExponent with base 10
-	// to allow integer representation of the exchange rate.
-	ScaledExchangeRate uint64
-
-	// ExchangeRateScalingExponent is the exponent (base 10 ) used to scale
-	// the exchange rate.
-	ExchangeRateScalingExponent uint8
-
-	// MinimumMillisats is the minimum number of millisatoshis that must be
+	// MinimumChannelPayment is the minimum number of millisatoshis that must be
 	// sent in the HTLC.
-	MinimumMillisats lnwire.MilliSatoshi
+	MinimumChannelPayment lnwire.MilliSatoshi
 
-	// ExpirySeconds is the number of seconds until the remit expires.
-	ExpirySeconds uint64
+	// Expiry is the asking price expiry lifetime unix timestamp.
+	Expiry uint64
 }
 
 // NewChannelRemit creates a new channel remit.
 func NewChannelRemit(assetAmount uint64,
 	quoteAccept rfqmsg.Accept) (*ChannelRemit, error) {
 
-	// Calculate the minimum number of millisatoshis that must be sent in
-	// the HTLC.
-	minimumMillisats, err := calcMillisatsFromAssetAmt(
-		assetAmount, uint64(quoteAccept.AskingPrice),
-		defaultExchangeRateScalingExponent,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable to calculate channel remit "+
-			"minimum millisats: %w", err)
-	}
-
 	// Compute the serialised short channel ID (SCID) for the channel.
 	scid := SerialisedScid(quoteAccept.ShortChannelId())
 
 	return &ChannelRemit{
-		Scid:                        scid,
-		AssetAmount:                 assetAmount,
-		ScaledExchangeRate:          uint64(quoteAccept.AskingPrice),
-		ExchangeRateScalingExponent: defaultExchangeRateScalingExponent,
-		MinimumMillisats:            minimumMillisats,
-		ExpirySeconds:               quoteAccept.ExpirySeconds,
+		Scid:                  scid,
+		AssetAmount:           assetAmount,
+		MinimumChannelPayment: quoteAccept.AskingPrice,
+		Expiry:                quoteAccept.Expiry,
 	}, nil
 }
 
@@ -117,24 +54,22 @@ func (c *ChannelRemit) CheckHtlcCompliance(
 	htlc lndclient.InterceptedHtlc) error {
 
 	// Check that the HTLC amount is at least the minimum acceptable amount.
-	if htlc.AmountOutMsat <= c.MinimumMillisats {
+	if htlc.AmountOutMsat <= c.MinimumChannelPayment {
 		return fmt.Errorf("htlc out amount is less than the remit's "+
 			"minimum (htlc_out_msat=%d, remit_min_msat=%d)",
-			htlc.AmountOutMsat, c.MinimumMillisats)
+			htlc.AmountOutMsat, c.MinimumChannelPayment)
 	}
 
 	// Check that the channel SCID is as expected.
 	htlcScid := SerialisedScid(htlc.OutgoingChannelID.ToUint64())
 	if htlcScid != c.Scid {
 		return fmt.Errorf("htlc outgoing channel ID does not match "+
-			"remit's SCID (htlc_scid=%d, remit_scid=%d)", htlcScid,
-			c.Scid)
+			"remit's SCID (htlc_scid=%d, remit_scid=%d)", htlcScid, c.Scid)
 	}
 
 	// Lastly, check to ensure that the channel remit has not expired.
-	if time.Now().Unix() > int64(c.ExpirySeconds) {
-		return fmt.Errorf("channel remit has expired (expiry=%d)",
-			c.ExpirySeconds)
+	if time.Now().Unix() > int64(c.Expiry) {
+		return fmt.Errorf("channel remit has expired (expiry=%d)", c.Expiry)
 	}
 
 	return nil
@@ -323,7 +258,7 @@ func (h *OrderHandler) FetchChannelRemit(scid SerialisedScid) (*ChannelRemit,
 	}
 
 	// If the remit has expired, return false and clear it from the cache.
-	if time.Now().Unix() > int64(remit.ExpirySeconds) {
+	if time.Now().Unix() > int64(remit.Expiry) {
 		delete(h.channelRemits, scid)
 		return nil, false
 	}
@@ -340,7 +275,7 @@ func (h *OrderHandler) cleanupStaleChannelRemits() {
 	// Iterate over the channel remits and remove any that have expired.
 	staleCounter := 0
 	for scid, remit := range h.channelRemits {
-		if time.Now().Unix() > int64(remit.ExpirySeconds) {
+		if time.Now().Unix() > int64(remit.Expiry) {
 			staleCounter++
 			delete(h.channelRemits, scid)
 		}

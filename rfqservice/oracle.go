@@ -9,6 +9,7 @@ import (
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -25,10 +26,10 @@ type PriceOracleSuggestedRate struct {
 	// AssetAmount is the asset amount.
 	AssetAmount uint64
 
-	// SuggestedRate is the suggested exchange rate.
-	SuggestedRate *rfqmsg.ExchangeRate
+	// AskingPrice is the asking price of the quote.
+	AskingPrice *lnwire.MilliSatoshi
 
-	// Expiry is the suggested rate expiry lifetime unix timestamp.
+	// Expiry is the asking price expiry lifetime unix timestamp.
 	Expiry uint64
 
 	// Err is the error returned by the price oracle service.
@@ -41,7 +42,7 @@ type PriceOracle interface {
 	// QueryAskingPrice returns the asking price for the given asset amount.
 	QueryAskingPrice(ctx context.Context, assetId *asset.ID,
 		assetGroupKey *btcec.PublicKey, assetAmount uint64,
-		suggestedRate *rfqmsg.ExchangeRate) (*PriceOracleSuggestedRate,
+		bidPrice *lnwire.MilliSatoshi) (*PriceOracleSuggestedRate,
 		error)
 }
 
@@ -84,7 +85,7 @@ func NewRpcPriceOracle(addr url.URL) (*RpcPriceOracle, error) {
 // QueryAskingPrice returns the asking price for the given asset amount.
 func (r *RpcPriceOracle) QueryAskingPrice(ctx context.Context,
 	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	suggestedRate *rfqmsg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
+	bidPrice *lnwire.MilliSatoshi) (*PriceOracleSuggestedRate, error) {
 
 	//// Call the external oracle service to get the exchange rate.
 	//conn := getClientConn(ctx, false)
@@ -111,7 +112,7 @@ func NewMockPriceOracle(rateLifetime uint64) *MockPriceOracle {
 // QueryAskingPrice returns the asking price for the given asset amount.
 func (m *MockPriceOracle) QueryAskingPrice(_ context.Context,
 	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmt uint64,
-	suggestedRate *rfqmsg.ExchangeRate) (*PriceOracleSuggestedRate, error) {
+	bidPrice *lnwire.MilliSatoshi) (*PriceOracleSuggestedRate, error) {
 
 	// Calculate the rate expiry lifetime.
 	expiry := uint64(time.Now().Unix()) + m.rateLifetime
@@ -120,7 +121,7 @@ func (m *MockPriceOracle) QueryAskingPrice(_ context.Context,
 		AssetID:       assetId,
 		AssetGroupKey: assetGroupKey,
 		AssetAmount:   assetAmt,
-		SuggestedRate: suggestedRate,
+		AskingPrice:   bidPrice,
 		Expiry:        expiry,
 	}, nil
 }
