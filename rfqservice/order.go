@@ -18,15 +18,15 @@ type SerialisedScid uint64
 // ChannelRemit is a struct that holds the terms which determine whether a
 // channel HTLC is accepted or rejected.
 type ChannelRemit struct {
-	// Scid is the serialised short channel ID (SCID) of the channel for
+	// Scid is the serialised short channel ID (SCID) of the channel to
 	// which the remit applies.
 	Scid SerialisedScid
 
 	// AssetAmount is the amount of the tap asset that is being requested.
 	AssetAmount uint64
 
-	// MinimumChannelPayment is the minimum number of millisatoshis that must be
-	// sent in the HTLC.
+	// MinimumChannelPayment is the minimum number of millisatoshis that
+	// must be sent in the HTLC.
 	MinimumChannelPayment lnwire.MilliSatoshi
 
 	// Expiry is the asking price expiry lifetime unix timestamp.
@@ -51,6 +51,14 @@ func NewChannelRemit(quoteAccept rfqmsg.Accept) (*ChannelRemit, error) {
 func (c *ChannelRemit) CheckHtlcCompliance(
 	htlc lndclient.InterceptedHtlc) error {
 
+	// Check that the channel SCID is as expected.
+	htlcScid := SerialisedScid(htlc.OutgoingChannelID.ToUint64())
+	if htlcScid != c.Scid {
+		return fmt.Errorf("htlc outgoing channel ID does not match "+
+			"remit's SCID (htlc_scid=%d, remit_scid=%d)", htlcScid,
+			c.Scid)
+	}
+
 	// Check that the HTLC amount is at least the minimum acceptable amount.
 	if htlc.AmountOutMsat <= c.MinimumChannelPayment {
 		return fmt.Errorf("htlc out amount is less than the remit's "+
@@ -58,16 +66,10 @@ func (c *ChannelRemit) CheckHtlcCompliance(
 			htlc.AmountOutMsat, c.MinimumChannelPayment)
 	}
 
-	// Check that the channel SCID is as expected.
-	htlcScid := SerialisedScid(htlc.OutgoingChannelID.ToUint64())
-	if htlcScid != c.Scid {
-		return fmt.Errorf("htlc outgoing channel ID does not match "+
-			"remit's SCID (htlc_scid=%d, remit_scid=%d)", htlcScid, c.Scid)
-	}
-
 	// Lastly, check to ensure that the channel remit has not expired.
 	if time.Now().Unix() > int64(c.Expiry) {
-		return fmt.Errorf("channel remit has expired (expiry=%d)", c.Expiry)
+		return fmt.Errorf("channel remit has expired (expiry=%d)",
+			c.Expiry)
 	}
 
 	return nil
@@ -76,8 +78,8 @@ func (c *ChannelRemit) CheckHtlcCompliance(
 // OrderHandlerCfg is a struct that holds the configuration parameters for the
 // order handler service.
 type OrderHandlerCfg struct {
-	// CleanupInterval is the interval at which the order
-	// handler cleans up expired accepted quotes from its local cache.
+	// CleanupInterval is the interval at which the order handler cleans up
+	// expired accepted quotes from its local cache.
 	CleanupInterval time.Duration
 
 	// HtlcInterceptor is the HTLC interceptor. This component is used to
@@ -85,10 +87,9 @@ type OrderHandlerCfg struct {
 	HtlcInterceptor HtlcInterceptor
 }
 
-// OrderHandler orchestrates management of accepted RFQ (Request For Quote)
-// bundles. It monitors HTLCs (Hash Time Locked Contracts), determining
-// acceptance or rejection based on compliance with the terms of the associated
-// quote.
+// OrderHandler orchestrates management of accepted quote bundles. It monitors
+// HTLCs (Hash Time Locked Contracts), and determines acceptance/rejection based
+// on the terms of the associated accepted quote.
 type OrderHandler struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -97,7 +98,7 @@ type OrderHandler struct {
 	cfg OrderHandlerCfg
 
 	// channelRemits is a map of serialised short channel IDs (SCIDs) to
-	// associated active channel quote remits.
+	// associated active channel remits.
 	channelRemits map[SerialisedScid]ChannelRemit
 
 	// channelRemitsMtx guards the channelRemits map.
@@ -241,7 +242,7 @@ func (h *OrderHandler) RegisterChannelRemit(quoteAccept rfqmsg.Accept) error {
 
 // FetchChannelRemit fetches a channel remit given a serialised SCID. If a
 // channel remit is not found, false is returned. Expired channel remits are
-// also not returned and are removed from the cache.
+// not returned and are removed from the cache.
 func (h *OrderHandler) FetchChannelRemit(scid SerialisedScid) (*ChannelRemit,
 	bool) {
 
@@ -278,8 +279,8 @@ func (h *OrderHandler) cleanupStaleChannelRemits() {
 	}
 
 	if staleCounter > 0 {
-		log.Tracef("Removed %d stale channel remits from the order "+
-			"handler", staleCounter)
+		log.Tracef("Removed stale channel remits from the order "+
+			"handler: (count=%d)", staleCounter)
 	}
 }
 
@@ -287,6 +288,7 @@ func (h *OrderHandler) cleanupStaleChannelRemits() {
 func (h *OrderHandler) Stop() error {
 	log.Info("Stopping RFQ subsystem: order handler")
 
+	// Stop the main event loop.
 	close(h.Quit)
 	return nil
 }

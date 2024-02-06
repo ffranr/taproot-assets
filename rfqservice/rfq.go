@@ -183,6 +183,9 @@ func (m *Manager) Stop() error {
 	m.stopOnce.Do(func() {
 		log.Info("Stopping RFQ system")
 		stopErr = m.stopSubsystems()
+
+		// Stop the main event loop.
+		close(m.Quit)
 	})
 
 	return stopErr
@@ -221,8 +224,8 @@ func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 	case *rfqmsg.Request:
 		err := m.negotiator.HandleIncomingQuoteRequest(*msg)
 		if err != nil {
-			return fmt.Errorf("error handling incoming quote request: %w",
-				err)
+			return fmt.Errorf("error handling incoming quote "+
+				"request: %w", err)
 		}
 	}
 
@@ -234,11 +237,12 @@ func (m *Manager) handleOutgoingMessage(outgoingMsg rfqmsg.OutgoingMsg) error {
 	// Perform type specific handling of the outgoing message.
 	switch msg := outgoingMsg.(type) {
 	case *rfqmsg.Accept:
-		// Inform the HTLC order handler that we've accepted the quote request.
-		// TODO(ffranr): set the asset amount correctly
+		// Inform the HTLC order handler that we've accepted the quote
+		// request.
 		err := m.orderHandler.RegisterChannelRemit(*msg)
 		if err != nil {
-			return fmt.Errorf("error registering channel remit: %w", err)
+			return fmt.Errorf("error registering channel remit: %w",
+				err)
 		}
 	}
 
@@ -258,26 +262,29 @@ func (m *Manager) mainEventLoop() {
 		select {
 		// Handle incoming message.
 		case incomingMsg := <-m.incomingMessages:
-			log.Debugf("RFQ manager has received an incoming message")
+			log.Debugf("RFQ manager has received an incoming " +
+				"message")
 
 			err := m.handleIncomingMessage(incomingMsg)
 			if err != nil {
-				log.Warnf("Error handling incoming quote "+
-					"request: %v", err)
+				log.Warnf("Error handling incoming message: %v",
+					err)
 			}
 
 		// Handle outgoing message.
 		case outgoingMsg := <-m.outgoingMessages:
-			log.Debugf("RFQ manager has received an outgoing message.")
+			log.Debugf("RFQ manager has received an outgoing " +
+				"message.")
 
 			err := m.handleOutgoingMessage(outgoingMsg)
 			if err != nil {
-				log.Warnf("Error handling outgoing message: %v", err)
+				log.Warnf("Error handling outgoing message: %v",
+					err)
 			}
 
 		case <-m.Quit:
-			log.Debug("RFQ manager main event loop has received the " +
-				"shutdown signal")
+			log.Debug("RFQ manager main event loop has received " +
+				"the shutdown signal")
 			return
 		}
 	}

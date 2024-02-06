@@ -86,7 +86,7 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 	quoteRequest, err := rfqmsg.NewRequestMsgFromWire(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote request message "+
-			"from a lndclient custom message: %w", err)
+			"from a wire message: %w", err)
 	}
 
 	// TODO(ffranr): Determine whether to keep or discard the RFQ message
@@ -109,9 +109,14 @@ func (h *StreamHandler) handleIncomingQuoteAccept(
 	quoteAccept, err := rfqmsg.NewAcceptFromWireMsg(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote accept message "+
-			"from a lndclient custom message: %w", err)
+			"from a wire message: %w", err)
 	}
 	quoteAccept = quoteAccept
+
+	// TODO(ffranr): At this point, we need to validate that the quote
+	//  accept message is valid. We need to check that the quote accept
+	//  message is associated with a valid quote request. Finally, we need
+	//  to inform the RFQ manager that the quote request has been accepted.
 
 	return nil
 }
@@ -123,27 +128,23 @@ func (h *StreamHandler) handleIncomingQuoteReject(
 	quoteReject, err := rfqmsg.NewQuoteRejectFromWireMsg(wireMsg)
 	if err != nil {
 		return fmt.Errorf("unable to create a quote reject message "+
-			"from a lndclient custom message: %w", err)
+			"from a wire message: %w", err)
 	}
 	quoteReject = quoteReject
+
+	// TODO(ffranr): At this point, we need to validate that the quote
+	//  reject message is valid. We need to check that the quote reject
+	//  message is associated with a valid quote request. Finally, we need
+	//  to inform the RFQ manager that the quote request has been rejected.
 
 	return nil
 }
 
-// handleIncomingRawMessage handles an incoming raw peer message.
-func (h *StreamHandler) handleIncomingRawMessage(
-	rawMsg lndclient.CustomMessage) error {
+// handleIncomingWireMessage handles an incoming wire message.
+func (h *StreamHandler) handleIncomingWireMessage(
+	wireMsg rfqmsg.WireMessage) error {
 
-	// Convert the lndclient custom message into a wire message. Wire
-	// message is a RFQ package type that is used by interfaces throughout
-	// the package.
-	wireMsg := rfqmsg.WireMessage{
-		Peer:    rawMsg.Peer,
-		MsgType: rawMsg.MsgType,
-		Data:    rawMsg.Data,
-	}
-
-	switch rawMsg.MsgType {
+	switch wireMsg.MsgType {
 	case rfqmsg.MsgTypeRequest:
 		err := h.handleIncomingQuoteRequest(wireMsg)
 		if err != nil {
@@ -166,7 +167,7 @@ func (h *StreamHandler) handleIncomingRawMessage(
 		}
 
 	default:
-		// Silently disregard any messages were we don't recognise the
+		// Silently disregard the message if we don't recognise the
 		// message type.
 		return nil
 	}
@@ -211,12 +212,21 @@ func (h *StreamHandler) mainEventLoop() {
 		select {
 		case rawMsg, ok := <-h.recvRawMessages:
 			if !ok {
-				log.Warnf("raw custom messages channel " +
-					"closed unexpectedly")
+				log.Warnf("raw peer messages channel closed " +
+					"unexpectedly")
 				return
 			}
 
-			err := h.handleIncomingRawMessage(rawMsg)
+			// Convert the raw peer message into a wire message.
+			// Wire message is a RFQ package type that is used by
+			// interfaces throughout the package.
+			wireMsg := rfqmsg.WireMessage{
+				Peer:    rawMsg.Peer,
+				MsgType: rawMsg.MsgType,
+				Data:    rawMsg.Data,
+			}
+
+			err := h.handleIncomingWireMessage(wireMsg)
 			if err != nil {
 				log.Warnf("Error handling raw custom "+
 					"message recieve event: %v", err)
@@ -256,6 +266,7 @@ func (h *StreamHandler) Start() error {
 func (h *StreamHandler) Stop() error {
 	log.Info("Stopping RFQ subsystem: stream handler")
 
+	// Stop the main event loop.
 	close(h.Quit)
 	return nil
 }
@@ -263,12 +274,12 @@ func (h *StreamHandler) Stop() error {
 // PeerMessagePorter is an interface that abstracts the peer message transport
 // layer.
 type PeerMessagePorter interface {
-	// SubscribeCustomMessages creates a subscription to custom messages
+	// SubscribeCustomMessages creates a subscription to raw messages
 	// received from our peers.
 	SubscribeCustomMessages(
 		ctx context.Context) (<-chan lndclient.CustomMessage,
 		<-chan error, error)
 
-	// SendCustomMessage sends a custom message to a peer.
+	// SendCustomMessage sends a raw message to a peer.
 	SendCustomMessage(context.Context, lndclient.CustomMessage) error
 }

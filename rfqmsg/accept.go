@@ -152,7 +152,9 @@ type Accept struct {
 // NewAcceptFromRequest creates a new instance of a quote accept message given
 // a quote request message.
 func NewAcceptFromRequest(request Request, askingPrice lnwire.MilliSatoshi,
-	expiry uint64, sig [64]byte) Accept {
+	expiry uint64) Accept {
+
+	var sig [64]byte
 
 	return Accept{
 		Peer:        request.Peer,

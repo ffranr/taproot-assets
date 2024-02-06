@@ -14,18 +14,9 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// PriceOracleSuggestedRate is a struct that holds the price oracle's suggested
-// exchange rate for an asset.
-type PriceOracleSuggestedRate struct {
-	// AssetID is the asset ID.
-	AssetID *asset.ID
-
-	// AssetGroupKey is the asset group key.
-	AssetGroupKey *btcec.PublicKey
-
-	// AssetAmount is the asset amount.
-	AssetAmount uint64
-
+// OracleAskingPriceResponse is a struct that holds the price oracle's suggested
+// asking price for an asset.
+type OracleAskingPriceResponse struct {
 	// AskingPrice is the asking price of the quote.
 	AskingPrice *lnwire.MilliSatoshi
 
@@ -33,7 +24,7 @@ type PriceOracleSuggestedRate struct {
 	Expiry uint64
 
 	// Err is the error returned by the price oracle service.
-	Err rfqmsg.RejectErr
+	Err *rfqmsg.RejectErr
 }
 
 // PriceOracle is an interface that provides exchange rate information for
@@ -42,7 +33,7 @@ type PriceOracle interface {
 	// QueryAskingPrice returns the asking price for the given asset amount.
 	QueryAskingPrice(ctx context.Context, assetId *asset.ID,
 		assetGroupKey *btcec.PublicKey, assetAmount uint64,
-		bidPrice *lnwire.MilliSatoshi) (*PriceOracleSuggestedRate,
+		bidPrice *lnwire.MilliSatoshi) (*OracleAskingPriceResponse,
 		error)
 }
 
@@ -85,7 +76,7 @@ func NewRpcPriceOracle(addr url.URL) (*RpcPriceOracle, error) {
 // QueryAskingPrice returns the asking price for the given asset amount.
 func (r *RpcPriceOracle) QueryAskingPrice(ctx context.Context,
 	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	bidPrice *lnwire.MilliSatoshi) (*PriceOracleSuggestedRate, error) {
+	bidPrice *lnwire.MilliSatoshi) (*OracleAskingPriceResponse, error) {
 
 	//// Call the external oracle service to get the exchange rate.
 	//conn := getClientConn(ctx, false)
@@ -111,18 +102,15 @@ func NewMockPriceOracle(rateLifetime uint64) *MockPriceOracle {
 
 // QueryAskingPrice returns the asking price for the given asset amount.
 func (m *MockPriceOracle) QueryAskingPrice(_ context.Context,
-	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmt uint64,
-	bidPrice *lnwire.MilliSatoshi) (*PriceOracleSuggestedRate, error) {
+	_ *asset.ID, _ *btcec.PublicKey, _ uint64,
+	bidPrice *lnwire.MilliSatoshi) (*OracleAskingPriceResponse, error) {
 
 	// Calculate the rate expiry lifetime.
 	expiry := uint64(time.Now().Unix()) + m.rateLifetime
 
-	return &PriceOracleSuggestedRate{
-		AssetID:       assetId,
-		AssetGroupKey: assetGroupKey,
-		AssetAmount:   assetAmt,
-		AskingPrice:   bidPrice,
-		Expiry:        expiry,
+	return &OracleAskingPriceResponse{
+		AskingPrice: bidPrice,
+		Expiry:      expiry,
 	}, nil
 }
 

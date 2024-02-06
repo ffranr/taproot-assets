@@ -15,9 +15,8 @@ type NegotiatorCfg struct {
 	PriceOracle PriceOracle
 }
 
-// Negotiator is a struct that handles the negotiation of quotes. It is a
-// subsystem of the RFQ system. It determines whether a quote is accepted or
-// rejected.
+// Negotiator is a struct that handles the negotiation of quotes. It is a RFQ
+// subsystem. It determines whether a quote is accepted or rejected.
 type Negotiator struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -50,7 +49,7 @@ func NewNegotiator(cfg NegotiatorCfg,
 
 // queryPriceOracle queries the price oracle for the asking price.
 func (n *Negotiator) queryPriceOracle(
-	req rfqmsg.Request) (*PriceOracleSuggestedRate, error) {
+	req rfqmsg.Request) (*OracleAskingPriceResponse, error) {
 
 	ctx, cancel := n.WithCtxQuitNoTimeout()
 	defer cancel()
@@ -66,37 +65,38 @@ func (n *Negotiator) queryPriceOracle(
 	return res, nil
 }
 
-// handlePriceOracleResponse handles the response from the price oracle.
-func (n *Negotiator) handlePriceOracleResponse(
-	request rfqmsg.Request, oracleResponse *PriceOracleSuggestedRate) error {
+// handlePriceOracleResponse handles a response from the price oracle.
+func (n *Negotiator) handlePriceOracleResponse(request rfqmsg.Request,
+	oracleResponse *OracleAskingPriceResponse) error {
 
-	// If the suggested rate is nil, then we will return the error message
+	// If the asking price is nil, then we will return the error message
 	// supplied by the price oracle.
 	if oracleResponse.AskingPrice == nil {
 		rejectMsg := rfqmsg.NewRejectMsg(
-			request.Peer, request.ID, oracleResponse.Err,
+			request.Peer, request.ID, *oracleResponse.Err,
 		)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
 		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
 		if !sendSuccess {
-			return fmt.Errorf("negotiator failed to send reject " +
-				"message")
+			return fmt.Errorf("negotiator failed to add reject " +
+				"message to the outgoing messages channel")
 		}
 	}
 
-	// If the suggested rate is not nil, then we can proceed to respond
-	// with an accept message.
-	var sig [64]byte
+	// TODO(ffranr): Ensure that the expiry time is valid and sufficient.
+
+	// If the asking price is not nil, then we can proceed to respond with
+	// an accept message.
 	acceptMsg := rfqmsg.NewAcceptFromRequest(
-		request, *oracleResponse.AskingPrice, oracleResponse.Expiry, sig,
+		request, *oracleResponse.AskingPrice, oracleResponse.Expiry,
 	)
 	var msg rfqmsg.OutgoingMsg = &acceptMsg
 
 	sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
 	if !sendSuccess {
-		return fmt.Errorf("negotiator failed to populate accept message " +
-			"channel")
+		return fmt.Errorf("negotiator failed to add accept message " +
+			"to the outgoing messages channel")
 	}
 
 	return nil
@@ -104,8 +104,8 @@ func (n *Negotiator) handlePriceOracleResponse(
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
 func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
-	// If there is no price oracle available, then we cannot proceed with the
-	// negotiation. We will reject the quote request with an error.
+	// If there is no price oracle available, then we cannot proceed with
+	// the negotiation. We will reject the quote request with an error.
 	if n.cfg.PriceOracle == nil {
 		rejectMsg := rfqmsg.NewRejectMsg(
 			req.Peer, req.ID, rfqmsg.ErrPriceOracleUnavailable,
@@ -114,7 +114,8 @@ func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
 
 		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
 		if !sendSuccess {
-			return fmt.Errorf("negotiator failed to send reject message")
+			return fmt.Errorf("negotiator failed to send reject " +
+				"message")
 		}
 	}
 
@@ -174,6 +175,7 @@ func (n *Negotiator) Start() error {
 func (n *Negotiator) Stop() error {
 	log.Info("Stopping RFQ subsystem: quote negotiator")
 
+	// Stop the main event loop.
 	close(n.Quit)
 	return nil
 }
