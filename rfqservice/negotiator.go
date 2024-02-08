@@ -253,10 +253,10 @@ func (n *Negotiator) mainEventLoop() {
 
 // Start starts the service.
 func (n *Negotiator) Start() error {
-	log.Info("Starting RFQ subsystem: negotiator")
-
 	var startErr error
 	n.startOnce.Do(func() {
+		log.Info("Starting subsystem: negotiator")
+
 		// Start the main event loop in a separate goroutine.
 		n.Wg.Add(1)
 		go func() {
@@ -269,9 +269,11 @@ func (n *Negotiator) Start() error {
 
 // Stop stops the handler.
 func (n *Negotiator) Stop() error {
-	log.Info("Stopping RFQ subsystem: quote negotiator")
+	n.stopOnce.Do(func() {
+		log.Info("Stopping subsystem: quote negotiator")
 
-	// Stop the main event loop.
-	close(n.Quit)
+		// Stop the main event loop.
+		close(n.Quit)
+	})
 	return nil
 }

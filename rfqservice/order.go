@@ -128,6 +128,8 @@ func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 	htlc lndclient.InterceptedHtlc) (*lndclient.InterceptedHtlcResponse,
 	error) {
 
+	log.Debug("Handling incoming HTLC")
+
 	// TODO(ffranr): I think we need a way to silently dismiss HTLCs that
 	//  are not associated with tap.
 
@@ -164,9 +166,16 @@ func (h *OrderHandler) setupHtlcIntercept(ctx context.Context) error {
 	// function to the interceptor. The interceptor will call this function
 	// in a separate goroutine.
 	err := h.cfg.HtlcInterceptor.InterceptHtlcs(ctx, h.handleIncomingHtlc)
-	if err != nil {
-		return fmt.Errorf("unable to setup incoming HTLCs "+
-			"interception: %w", err)
+	select {
+	case <-h.Quit:
+		// If the service is shutting down, we can safely ignore any
+		// error from the interceptor.
+		return nil
+	default:
+		if err != nil {
+			return fmt.Errorf("unable to setup incoming HTLC "+
+				"interceptor: %w", err)
+		}
 	}
 
 	return nil
@@ -198,10 +207,10 @@ func (h *OrderHandler) mainEventLoop() {
 
 // Start starts the service.
 func (h *OrderHandler) Start() error {
-	log.Info("Starting RFQ subsystem: order handler")
-
 	var startErr error
 	h.startOnce.Do(func() {
+		log.Info("Starting subsystem: order handler")
+
 		// Start the main event loop in a separate goroutine.
 		h.Wg.Add(1)
 		go func() {
@@ -286,10 +295,12 @@ func (h *OrderHandler) cleanupStaleChannelRemits() {
 
 // Stop stops the handler.
 func (h *OrderHandler) Stop() error {
-	log.Info("Stopping RFQ subsystem: order handler")
+	h.stopOnce.Do(func() {
+		log.Info("Stopping subsystem: order handler")
 
-	// Stop the main event loop.
-	close(h.Quit)
+		// Stop the main event loop.
+		close(h.Quit)
+	})
 	return nil
 }
 

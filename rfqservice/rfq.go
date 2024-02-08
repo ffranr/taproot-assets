@@ -285,8 +285,8 @@ func (m *Manager) mainEventLoop() {
 			}
 
 		case <-m.Quit:
-			log.Debug("RFQ manager main event loop has received " +
-				"the shutdown signal")
+			log.Debug("Manager main event loop has received the " +
+				"shutdown signal")
 			return
 		}
 	}
