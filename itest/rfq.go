@@ -12,6 +12,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/lntest"
 	"github.com/lightningnetwork/lnd/lntest/node"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/stretchr/testify/require"
 )
@@ -85,18 +86,83 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	// Make sure Alice is aware of channel Bob=>Carol.
 	ht.AssertTopologyChannelOpen(alice, cpBC)
 
-	// Prepare the test cases.
-	req := &lnrpc.Invoice{ValueMsat: 1000}
-	addResponse := carol.RPC.AddInvoice(req)
-	invoice := carol.RPC.LookupInvoice(addResponse.RHash)
-	tc := &interceptorTestCase{
-		amountMsat: 1000,
-		invoice:    invoice,
-		payAddr:    invoice.PaymentAddr,
+	//aliceBobHopHint := &lnrpc.HopHint{
+	//	NodeId: bob.PubKeyStr,
+	//	//ChanId: scid.ToUint64(),
+	//	FeeBaseMsat: uint32(
+	//		chainreg.DefaultBitcoinBaseFeeMSat,
+	//	),
+	//	FeeProportionalMillionths: uint32(
+	//		chainreg.DefaultBitcoinFeeRate,
+	//	),
+	//	CltvExpiryDelta: chainreg.DefaultBitcoinTimeLockDelta,
+	//}
+
+	carolChannels := carol.RPC.ListChannels(
+		&lnrpc.ListChannelsRequest{},
+	)
+
+	carolChan := carolChannels.Channels[0]
+
+	t.Logf("Bob -> Carol channel ID: %v", carolChan.ChanId)
+
+	scid := lnwire.ShortChannelID{
+		BlockHeight: 34,
+		TxIndex:     34,
+		TxPosition:  34,
+	}
+	bobCarolHopHint := &lnrpc.HopHint{
+		NodeId: carolChan.RemotePubkey,
+		ChanId: scid.ToUint64(), //carolChan.ChanId,
+		FeeBaseMsat: uint32(
+			chainreg.DefaultBitcoinBaseFeeMSat,
+		),
+		FeeProportionalMillionths: uint32(
+			chainreg.DefaultBitcoinFeeRate,
+		),
+		CltvExpiryDelta: chainreg.DefaultBitcoinTimeLockDelta,
+	}
+	routeHints := []*lnrpc.RouteHint{
+		{
+			HopHints: []*lnrpc.HopHint{
+				//aliceBobHopHint,
+				bobCarolHopHint,
+			},
+		},
 	}
 
-	// We initiate a payment from Alice to Carol via Bob.
-	ts.sendPaymentAndAssertAction(tc)
+	paymentAmt := int64(1000)
+
+	// Prepare the test cases.
+	req := &lnrpc.Invoice{
+		ValueMsat:  paymentAmt,
+		RouteHints: routeHints,
+	}
+	addResponse := carol.RPC.AddInvoice(req)
+	invoice := carol.RPC.LookupInvoice(addResponse.RHash)
+	//tc := &interceptorTestCase{
+	//	amountMsat: paymentAmt,
+	//	invoice:    invoice,
+	//	payAddr:    invoice.PaymentAddr,
+	//}
+	//
+	//// We initiate a payment from Alice to Carol via Bob.
+	//ts.sendPaymentViaRouteAndAssertAction(tc)
+
+	//sendReq := &routerrpc.SendPaymentRequest{
+	//	Dest:           carol.PubKey[:],
+	//	Amt:            paymentAmt,
+	//	FinalCltvDelta: 40,
+	//	FeeLimitMsat:   math.MaxInt64,
+	//	PaymentHash:    invoice.RHash,
+	//	//DestCustomRecords: map[uint64][]byte{
+	//	//	record.KeySendType: keySendPreimage[:],
+	//	//},
+	//	TimeoutSeconds: 60,
+	//}
+	//ht.SendPaymentAssertSettled(alice, sendReq)
+
+	ht.CompletePaymentRequests(alice, []string{invoice.PaymentRequest})
 
 	// Finally, close channels.
 	ht.CloseChannel(alice, cpAB)
@@ -339,9 +405,27 @@ var (
 	customTestValue        = []byte{1, 3, 5}
 )
 
+// sendPaymentAndAssertAction sends a payment from alice and asserts that the
+// specified interceptor action is taken.
+func (c *interceptorTestScenario) sendPaymentAndAssertAction(
+	tc *interceptorTestCase) {
+
+	// Send the payment.
+	sendReq := &routerrpc.SendPaymentRequest{
+		PaymentRequest: tc.invoice.PaymentRequest,
+		//PaymentHash:    tc.invoice.RHash,
+		RouteHints:     tc.invoice.RouteHints,
+		TimeoutSeconds: 60,
+	}
+
+	c.ht.SendPaymentAssertSettled(c.alice, sendReq)
+
+	//return c.alice.RPC.SendPayment(sendReq)
+}
+
 // sendPaymentAndAssertAction sends a payment from alice to carol and asserts
 // that the specified interceptor action is taken.
-func (c *interceptorTestScenario) sendPaymentAndAssertAction(
+func (c *interceptorTestScenario) sendPaymentViaRouteAndAssertAction(
 	tc *interceptorTestCase) *lnrpc.HTLCAttempt {
 
 	// Build a route from alice to carol.
@@ -353,6 +437,14 @@ func (c *interceptorTestScenario) sendPaymentAndAssertAction(
 	route.Hops[0].CustomRecords = map[uint64][]byte{
 		customTestKey: customTestValue,
 	}
+
+	scid := lnwire.ShortChannelID{
+		BlockHeight: 42,
+		TxIndex:     42,
+		TxPosition:  42,
+	}
+
+	route.Hops[1].ChanId = scid.ToUint64()
 
 	// Send the payment.
 	sendReq := &routerrpc.SendToRouteRequest{
