@@ -313,6 +313,10 @@ func (q *Request) ToWire() (WireMessage, error) {
 	}, nil
 }
 
+func (q *Request) DestinationPeer() route.Vertex {
+	return q.Peer
+}
+
 // Ensure that the message type implements the OutgoingMsg interface.
 var _ OutgoingMsg = (*Request)(nil)
 

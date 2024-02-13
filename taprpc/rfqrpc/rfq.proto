@@ -11,12 +11,12 @@ service Rfq {
     rpc UpsertAssetBuyOrder (UpsertAssetBuyOrderRequest)
         returns (UpsertAssetBuyOrderResponse);
 
-    //    /* tapcli: `rfq sellorder`
-    //    UpsertAssetSellOrder is used to upsert a sell order for a specific
-    //    asset.
-    //     */
-    //    rpc UpsertAssetSellOrder (UpsertAssetSellOrderRequest)
-    //        returns (UpsertAssetSellOrderResponse);
+    /* tapcli: `rfq acceptedquotes`
+    QueryRfqAcceptedQuotes is used to upsert a sell order for a specific
+    asset.
+     */
+    rpc QueryRfqAcceptedQuotes (QueryRfqAcceptedQuotesRequest)
+        returns (QueryRfqAcceptedQuotesResponse);
 }
 
 message AssetSpecifier {
@@ -57,19 +57,29 @@ message UpsertAssetBuyOrderRequest {
 message UpsertAssetBuyOrderResponse {
 }
 
-// message UpsertAssetSellOrderRequest {
-//     // The asset to sell.
-//     AssetSpecifier asset = 1;
-//
-//     // The maximum amount of the asset to sell.
-//     uint64 max_asset_amount = 2;
-//
-//     // The minimum asking price in BTC (units: millisats).
-//     uint64 min_ask = 3;
-//
-//     // The unix timestamp after which the order is no longer valid.
-//     uint64 expiry = 4;
-// }
-//
-// message UpsertAssetSellOrderResponse {
-// }
+message QueryRfqAcceptedQuotesRequest {
+}
+
+message AcceptedQuote {
+    // The peer that accepted the quote.
+    string peer = 1;
+
+    // The unique identifier of the quote accept message.
+    bytes id = 2;
+
+    // scid is the short channel ID of the channel over which the payment for
+    // the quote should be made.
+    uint64 scid = 3;
+
+    uint64 asset_amount = 4;
+
+    // units: millisats
+    uint64 ask_price = 5;
+
+    // The unix timestamp after which the quote is no longer valid.
+    uint64 expiry = 6;
+}
+
+message QueryRfqAcceptedQuotesResponse {
+    repeated AcceptedQuote accepted_quotes = 1;
+}

@@ -236,6 +236,9 @@ func (h *OrderHandler) Start() error {
 // RegisterChannelRemit registers a channel management remit. If a remit exists
 // for the channel SCID, it is overwritten.
 func (h *OrderHandler) RegisterChannelRemit(quoteAccept rfqmsg.Accept) error {
+	log.Debugf("Registering channel remit for SCID: %d",
+		quoteAccept.ShortChannelId())
+
 	channelRemit, err := NewChannelRemit(quoteAccept)
 	if err != nil {
 		return fmt.Errorf("unable to create channel remit: %w", err)

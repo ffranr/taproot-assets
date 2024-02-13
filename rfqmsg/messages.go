@@ -48,6 +48,7 @@ type WireMessage struct {
 // IncomingMsg is an interface that represents an inbound wire message
 // that has been received from a peer.
 type IncomingMsg interface {
+	DestinationPeer() route.Vertex
 }
 
 // OutgoingMsg is an interface that represents an outbound wire message
@@ -55,4 +56,6 @@ type IncomingMsg interface {
 type OutgoingMsg interface {
 	// ToWire returns a wire message with a serialized data field.
 	ToWire() (WireMessage, error)
+
+	DestinationPeer() route.Vertex
 }

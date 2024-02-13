@@ -24,8 +24,7 @@ func TypeRecordAcceptID(id *ID) tlv.Record {
 	const recordSize = 32
 
 	return tlv.MakeStaticRecord(
-		TypeAcceptID, id, recordSize,
-		IdEncoder, IdDecoder,
+		TypeAcceptID, id, recordSize, IdEncoder, IdDecoder,
 	)
 }
 
@@ -231,6 +230,10 @@ func (q *Accept) ToWire() (WireMessage, error) {
 		MsgType: MsgTypeAccept,
 		Data:    msgDataBytes,
 	}, nil
+}
+
+func (q *Accept) DestinationPeer() route.Vertex {
+	return q.Peer
 }
 
 // Ensure that the message type implements the OutgoingMsg interface.

@@ -69,6 +69,14 @@ type Manager struct {
 	// messages.
 	outgoingMessages chan rfqmsg.OutgoingMsg
 
+	// peerAcceptedQuotes is a map of serialised short channel IDs (SCIDs)
+	// to associated accepted quotes. These quotes have been accepted by
+	// peer nodes and are therefore available for use in buying assets.
+	peerAcceptedQuotes map[SerialisedScid]rfqmsg.Accept
+
+	// peerAcceptedQuotesMtx guards the peerAcceptedQuotes map.
+	peerAcceptedQuotesMtx sync.Mutex
+
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
 	*fn.ContextGuard
@@ -81,6 +89,8 @@ func NewManager(cfg ManagerCfg) (Manager, error) {
 
 		incomingMessages: make(chan rfqmsg.IncomingMsg),
 		outgoingMessages: make(chan rfqmsg.OutgoingMsg),
+
+		peerAcceptedQuotes: make(map[SerialisedScid]rfqmsg.Accept),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -219,7 +229,8 @@ func (m *Manager) stopSubsystems() error {
 	return nil
 }
 
-// handleIncomingMessage handles an incoming message.
+// handleIncomingMessage handles an incoming message. These are messages that
+// have been received from a peer.
 func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 	// Perform type specific handling of the incoming message.
 	//
@@ -231,18 +242,29 @@ func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 			return fmt.Errorf("error handling incoming quote "+
 				"request: %w", err)
 		}
+	case *rfqmsg.Accept:
+		// The quote request has been accepted. Store accepted quote
+		// so that it can be used by our sending lightning node.
+		log.Debugf("Received accept message from peer: %v", msg.Peer)
+
+		m.peerAcceptedQuotesMtx.Lock()
+		defer m.peerAcceptedQuotesMtx.Unlock()
+
+		scid := SerialisedScid(msg.ShortChannelId())
+		m.peerAcceptedQuotes[scid] = *msg
 	}
 
 	return nil
 }
 
-// handleOutgoingMessage handles an outgoing message.
+// handleOutgoingMessage handles an outgoing message. Outgoing messages are
+// messages that will be sent to a peer.
 func (m *Manager) handleOutgoingMessage(outgoingMsg rfqmsg.OutgoingMsg) error {
 	// Perform type specific handling of the outgoing message.
 	switch msg := outgoingMsg.(type) {
 	case *rfqmsg.Accept:
-		// Inform the HTLC order handler that we've accepted the quote
-		// request.
+		// Before sending an accept message to a peer, inform the HTLC
+		// order handler that we've accepted the quote request.
 		err := m.orderHandler.RegisterChannelRemit(*msg)
 		if err != nil {
 			return fmt.Errorf("error registering channel remit: %w",
@@ -266,8 +288,10 @@ func (m *Manager) mainEventLoop() {
 		select {
 		// Handle incoming message.
 		case incomingMsg := <-m.incomingMessages:
-			log.Debugf("RFQ manager has received an incoming " +
-				"message")
+			peer := incomingMsg.DestinationPeer()
+			log.Debugf("RFQ manager has received an incoming "+
+				"message (msg_type=%T, dest_peer=%s)",
+				incomingMsg, peer.String())
 
 			err := m.handleIncomingMessage(incomingMsg)
 			if err != nil {
@@ -277,8 +301,10 @@ func (m *Manager) mainEventLoop() {
 
 		// Handle outgoing message.
 		case outgoingMsg := <-m.outgoingMessages:
-			log.Debugf("RFQ manager has received an outgoing " +
-				"message.")
+			peer := outgoingMsg.DestinationPeer()
+			log.Debugf("RFQ manager has received an outgoing "+
+				"message (msg_type=%T, dest_peer=%s)",
+				outgoingMsg, peer.String())
 
 			err := m.handleOutgoingMessage(outgoingMsg)
 			if err != nil {
@@ -364,4 +390,20 @@ func (m *Manager) UpsertAssetBuyOrder(order BuyOrder) error {
 	}
 
 	return nil
+}
+
+// QueryAcceptedQuotes returns a map of accepted quotes that have been
+// registered with the RFQ manager.
+func (m *Manager) QueryAcceptedQuotes() map[SerialisedScid]rfqmsg.Accept {
+	m.peerAcceptedQuotesMtx.Lock()
+	defer m.peerAcceptedQuotesMtx.Unlock()
+
+	// Iterate over the accepted quotes and remove any that have expired.
+	for scid, remit := range m.peerAcceptedQuotes {
+		if time.Now().Unix() > int64(remit.Expiry) {
+			delete(m.peerAcceptedQuotes, scid)
+		}
+	}
+
+	return m.peerAcceptedQuotes
 }

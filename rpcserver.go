@@ -29,6 +29,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/mssmt"
 	"github.com/lightninglabs/taproot-assets/proof"
+	"github.com/lightninglabs/taproot-assets/rfqmsg"
 	"github.com/lightninglabs/taproot-assets/rfqservice"
 	"github.com/lightninglabs/taproot-assets/rpcperms"
 	"github.com/lightninglabs/taproot-assets/tapdb"
@@ -4639,6 +4640,42 @@ func (r *rpcServer) UpsertAssetBuyOrder(_ context.Context,
 	}
 
 	return &rfqrpc.UpsertAssetBuyOrderResponse{}, nil
+}
+
+// marshalAcceptedQuotes marshals a map of accepted quotes into the RPC form.
+func marshalAcceptedQuotes(
+	acceptedQuotes map[rfqservice.SerialisedScid]rfqmsg.Accept) []*rfqrpc.AcceptedQuote {
+
+	// Marshal the accepted quotes into the RPC form.
+	rpcQuotes := make([]*rfqrpc.AcceptedQuote, len(acceptedQuotes))
+	for scid, quote := range acceptedQuotes {
+		rpcQuote := &rfqrpc.AcceptedQuote{
+			Peer:        quote.Peer.String(),
+			Id:          quote.ID[:],
+			Scid:        uint64(scid),
+			AssetAmount: quote.AssetAmount,
+			AskPrice:    uint64(quote.AskingPrice),
+			Expiry:      quote.Expiry,
+		}
+		rpcQuotes = append(rpcQuotes, rpcQuote)
+	}
+
+	return rpcQuotes
+}
+
+// QueryRfqAcceptedQuotes queries for accepted quotes from the RFQ system.
+func (r *rpcServer) QueryRfqAcceptedQuotes(_ context.Context,
+	_ *rfqrpc.QueryRfqAcceptedQuotesRequest) (
+	*rfqrpc.QueryRfqAcceptedQuotesResponse, error) {
+
+	// Query the RFQ manager for accepted quotes.
+	acceptedQuotes := r.cfg.RfqManager.QueryAcceptedQuotes()
+
+	rpcQuotes := marshalAcceptedQuotes(acceptedQuotes)
+
+	return &rfqrpc.QueryRfqAcceptedQuotesResponse{
+		AcceptedQuotes: rpcQuotes,
+	}, nil
 }
 
 // MarshalAssetFedSyncCfg returns an RPC ready asset specific federation sync

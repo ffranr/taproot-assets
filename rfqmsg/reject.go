@@ -17,7 +17,11 @@ const (
 )
 
 func TypeRecordRejectID(id *ID) tlv.Record {
-	return tlv.MakePrimitiveRecord(TypeRejectID, id)
+	const recordSize = 32
+
+	return tlv.MakeStaticRecord(
+		TypeRejectID, id, recordSize, IdEncoder, IdDecoder,
+	)
 }
 
 func TypeRecordRejectErr(rejectErr *RejectErr) tlv.Record {
@@ -152,6 +156,17 @@ func (q *rejectMsgData) Decode(r io.Reader) error {
 	return stream.Decode(r)
 }
 
+// Bytes encodes the structure into a TLV stream and returns the bytes.
+func (q *rejectMsgData) Bytes() ([]byte, error) {
+	var b bytes.Buffer
+	err := q.Encode(&b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
+}
+
 // Reject is a struct that represents a quote reject message.
 type Reject struct {
 	// Peer is the peer that sent the quote request.
@@ -191,19 +206,21 @@ func NewQuoteRejectFromWireMsg(wireMsg WireMessage) (*Reject, error) {
 // ToWire returns a wire message with a serialized data field.
 func (q *Reject) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
-	var buff *bytes.Buffer
-	err := q.rejectMsgData.Encode(buff)
+	msgDataBytes, err := q.rejectMsgData.Bytes()
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
 	}
-	msgDataBytes := buff.Bytes()
 
 	return WireMessage{
 		Peer:    q.Peer,
 		MsgType: MsgTypeReject,
 		Data:    msgDataBytes,
 	}, nil
+}
+
+func (q *Reject) DestinationPeer() route.Vertex {
+	return q.Peer
 }
 
 // Ensure that the message type implements the OutgoingMsg interface.

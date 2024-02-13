@@ -111,6 +111,25 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	)
 	require.NoError(t.t, err, "unable to upsert asset buy order")
 
+	time.Sleep(5 * time.Second)
+
+	// Carol should have received an accepted quote from Bob. This accepted
+	// quote can be used by Carol to make a payment to Bob.
+	acceptedQuotes, err := carolTapd.QueryRfqAcceptedQuotes(
+		ctxt, &rfqrpc.QueryRfqAcceptedQuotesRequest{},
+	)
+	require.NoError(t.t, err, "unable to query accepted quotes")
+
+	require.Len(
+		t.t, acceptedQuotes.AcceptedQuotes, 1,
+		"expected 1 accepted quote",
+	)
+
+	// Get the short channel ID for the channel which Carol should use to
+	// make a payment to Bob.
+	acceptedQuote := acceptedQuotes.AcceptedQuotes[0]
+	scid := lnwire.NewShortChanIDFromInt(acceptedQuote.Scid)
+
 	// Open and wait for channels.
 	const chanAmt = btcutil.Amount(300000)
 	p := lntest.OpenChannelParams{Amt: chanAmt}
@@ -144,14 +163,14 @@ func testRfqHtlcIntercept(t *harnessTest) {
 
 	t.Logf("Bob -> Carol channel ID: %v", carolChan.ChanId)
 
-	scid := lnwire.ShortChannelID{
-		BlockHeight: 34,
-		TxIndex:     34,
-		TxPosition:  34,
-	}
+	//scid := lnwire.ShortChannelID{
+	//	BlockHeight: 34,
+	//	TxIndex:     34,
+	//	TxPosition:  34,
+	//}
 	bobCarolHopHint := &lnrpc.HopHint{
 		NodeId: carolChan.RemotePubkey,
-		ChanId: scid.ToUint64(), //carolChan.ChanId,
+		ChanId: scid.ToUint64(),
 		FeeBaseMsat: uint32(
 			chainreg.DefaultBitcoinBaseFeeMSat,
 		),
