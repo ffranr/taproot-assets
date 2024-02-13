@@ -1,28 +1,25 @@
 syntax = "proto3";
 
-import "taprootassets.proto";
-
 package rfqrpc;
 
-option go_package = "github.com/lightninglabs/taproot-assets/taprpc/rfqpriceoraclerpc";
+option go_package = "github.com/lightninglabs/taproot-assets/taprpc/rfqrpc";
 
-service RfqPriceOracle {
-    /* tapcli: `rfq priceoracle exchangerate`
-    QueryExchangeRate returns the exchange rate for a given asset.
+service Rfq {
+    /* tapcli: `rfq buyorder`
+    UpsertAssetBuyOrder is used to upsert a buy order for a specific asset.
     */
-    rpc QueryExchangeRate (QueryExchangeRateRequest)
-        returns (QueryExchangeRateResponse);
+    rpc UpsertAssetBuyOrder (UpsertAssetBuyOrderRequest)
+        returns (UpsertAssetBuyOrderResponse);
+
+    //    /* tapcli: `rfq sellorder`
+    //    UpsertAssetSellOrder is used to upsert a sell order for a specific
+    //    asset.
+    //     */
+    //    rpc UpsertAssetSellOrder (UpsertAssetSellOrderRequest)
+    //        returns (UpsertAssetSellOrderResponse);
 }
 
-message ExchangeRate {
-    // The scaled exchange rate.
-    uint64 scaled_rate = 1;
-
-    // The exchange rate scaling exponent (base 10).
-    uint32 scaling_exponent = 2;
-}
-
-message QueryExchangeRateRequest {
+message AssetSpecifier {
     oneof id {
         // The 32-byte asset ID specified as raw bytes (gRPC only).
         bytes asset_id = 1;
@@ -37,21 +34,42 @@ message QueryExchangeRateRequest {
         // REST).
         string group_key_str = 4;
     }
-
-    // The amount of the asset to exchange.
-    string amount = 5;
-
-    // The suggested exchange rate.
-    ExchangeRate suggested_rate = 6;
-
-    // The suggested rate expiry lifetime unix timestamp.
-    uint64 suggested_rate_expiry = 7;
 }
 
-message QueryExchangeRateResponse {
-    // The suggested exchange rate.
-    ExchangeRate rate = 1;
+message UpsertAssetBuyOrderRequest {
+    // asset_specifier is the subject asset.
+    AssetSpecifier asset_specifier = 1;
 
-    // The suggested rate expiry lifetime unix timestamp.
-    uint64 rate_expiry = 2;
+    // The minimum amount of the asset to buy.
+    uint64 min_asset_amount = 2;
+
+    // The maximum amount BTC to spend (units: millisats).
+    uint64 max_bid = 3;
+
+    // The unix timestamp after which the order is no longer valid.
+    uint64 expiry = 4;
+
+    // peer is an optional field that can be used to specify the peer to
+    // send the order to.
+    bytes peer = 5;
 }
+
+message UpsertAssetBuyOrderResponse {
+}
+
+// message UpsertAssetSellOrderRequest {
+//     // The asset to sell.
+//     AssetSpecifier asset = 1;
+//
+//     // The maximum amount of the asset to sell.
+//     uint64 max_asset_amount = 2;
+//
+//     // The minimum asking price in BTC (units: millisats).
+//     uint64 min_ask = 3;
+//
+//     // The unix timestamp after which the order is no longer valid.
+//     uint64 expiry = 4;
+// }
+//
+// message UpsertAssetSellOrderResponse {
+// }

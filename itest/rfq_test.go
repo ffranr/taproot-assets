@@ -1,12 +1,15 @@
 package itest
 
 import (
+	"context"
 	"crypto/rand"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/lightninglabs/taproot-assets/internal/test"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
+	"github.com/lightninglabs/taproot-assets/taprpc/mintrpc"
+	"github.com/lightninglabs/taproot-assets/taprpc/rfqrpc"
 	"github.com/lightningnetwork/lnd/chainreg"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
@@ -36,9 +39,8 @@ func testRfqQuoteRequest(t *harnessTest) {
 
 	peer := route.Vertex(t.lndHarness.Alice.PubKey[:])
 
-	quoteRequest := rfqmsg.NewRequestMsg(
-		peer, randomQuoteRequestId, nil, randomGroupPrivateKey.PubKey(),
-		42, 10,
+	quoteRequest, err := rfqmsg.NewRequest(
+		peer, nil, randomGroupPrivateKey.PubKey(), 42, 10,
 	)
 	require.NoError(t.t, err, "unable to create quote request message data")
 
@@ -66,12 +68,48 @@ func testRfqHtlcIntercept(t *harnessTest) {
 
 	alice, bob, carol := ts.alice, ts.bob, ts.carol
 
-	// Set up a tapd node for Bob. (The primary tapd node should be assigned
-	// to Alice.)
+	// Set up a tapd node for Bob.
 	bobTapd := setupTapdHarness(t.t, t, bob, t.universeServer)
 	defer func() {
 		require.NoError(t.t, bobTapd.stop(!*noDelete))
 	}()
+
+	// Setup a tapd node for Carol.
+	carolTapd := setupTapdHarness(t.t, t, carol, t.universeServer)
+	defer func() {
+		require.NoError(t.t, carolTapd.stop(!*noDelete))
+	}()
+
+	// Mint an asset with Bob's tapd node.
+	rpcAssets := MintAssetsConfirmBatch(
+		t.t, t.lndHarness.Miner.Client, bobTapd,
+		[]*mintrpc.MintAssetRequest{issuableAssets[0]},
+	)
+
+	genInfo := rpcAssets[0].AssetGenesis
+
+	ctxb := context.Background()
+	ctxt, cancel := context.WithTimeout(ctxb, defaultWaitTimeout)
+	defer cancel()
+
+	// Carol makes a buy order to Bob.
+	buyOrderExpiry := uint64(time.Now().Add(24 * time.Hour).Unix())
+	buyOrderDestPeer := route.Vertex(t.lndHarness.Bob.PubKey[:])
+
+	_, err := carolTapd.UpsertAssetBuyOrder(
+		ctxt, &rfqrpc.UpsertAssetBuyOrderRequest{
+			AssetSpecifier: &rfqrpc.AssetSpecifier{
+				Id: &rfqrpc.AssetSpecifier_AssetId{
+					AssetId: genInfo.AssetId,
+				},
+			},
+			MinAssetAmount: 200,
+			MaxBid:         42000,
+			Expiry:         buyOrderExpiry,
+			Peer:           buyOrderDestPeer[:],
+		},
+	)
+	require.NoError(t.t, err, "unable to upsert asset buy order")
 
 	// Open and wait for channels.
 	const chanAmt = btcutil.Amount(300000)

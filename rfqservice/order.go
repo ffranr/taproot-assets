@@ -29,7 +29,7 @@ type ChannelRemit struct {
 	// must be sent in the HTLC.
 	MinimumChannelPayment lnwire.MilliSatoshi
 
-	// Expiry is the asking price expiry lifetime unix timestamp.
+	// Expiry is the asking price expiryDelay lifetime unix timestamp.
 	Expiry uint64
 }
 
@@ -68,7 +68,7 @@ func (c *ChannelRemit) CheckHtlcCompliance(
 
 	// Lastly, check to ensure that the channel remit has not expired.
 	if time.Now().Unix() > int64(c.Expiry) {
-		return fmt.Errorf("channel remit has expired (expiry=%d)",
+		return fmt.Errorf("channel remit has expired (expiryDelay=%d)",
 			c.Expiry)
 	}
 

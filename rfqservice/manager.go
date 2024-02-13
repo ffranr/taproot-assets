@@ -10,6 +10,8 @@ import (
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
+	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/lightningnetwork/lnd/routing/route"
 )
 
 const (
@@ -38,7 +40,7 @@ type ManagerCfg struct {
 	PriceOracle PriceOracle
 }
 
-// Manager is a struct that handles the request for quote (RFQ) system.
+// Manager is a struct that manages the request for quote (RFQ) system.
 type Manager struct {
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -284,6 +286,11 @@ func (m *Manager) mainEventLoop() {
 					err)
 			}
 
+		// Handle errors from the negotiator.
+		case err := <-m.negotiator.ErrChan:
+			log.Warnf("Negotiator has encountered an error: %v",
+				err)
+
 		case <-m.Quit:
 			log.Debug("Manager main event loop has received the " +
 				"shutdown signal")
@@ -311,6 +318,49 @@ func (m *Manager) RemoveAssetSellOffer(assetID *asset.ID,
 	err := m.negotiator.RemoveAssetSellOffer(assetID, assetGroupKey)
 	if err != nil {
 		return fmt.Errorf("error removing asset sell offer: %w", err)
+	}
+
+	return nil
+}
+
+// BuyOrder is a struct that represents a buy order.
+type BuyOrder struct {
+	// AssetID is the ID of the asset that the buyer is interested in.
+	AssetID *asset.ID
+
+	// AssetGroupKey is the public key of the asset group that the buyer is
+	// interested in.
+	AssetGroupKey *btcec.PublicKey
+
+	// MinAssetAmount is the minimum amount of the asset that the buyer is
+	// willing to accept.
+	MinAssetAmount uint64
+
+	// MaxBid is the maximum bid price that the buyer is willing to pay.
+	MaxBid lnwire.MilliSatoshi
+
+	// Expiry is the unix timestamp at which the buy order expires.
+	Expiry uint64
+
+	// Peer is the peer that the buy order is intended for. This field is
+	// optional.
+	Peer *route.Vertex
+}
+
+// UpsertAssetBuyOrder upserts an asset buy order for management.
+func (m *Manager) UpsertAssetBuyOrder(order BuyOrder) error {
+	// For now, a peer must be specified.
+	//
+	// TODO(ffranr): Add support for peerless buy orders. The negotiator
+	//  should be able to determine the optimal peer.
+	if order.Peer == nil {
+		return fmt.Errorf("buy order peer must be specified")
+	}
+
+	// Request a quote from a peer via the negotiator.
+	err := m.negotiator.RequestQuote(order)
+	if err != nil {
+		return fmt.Errorf("error registering asset buy order: %w", err)
 	}
 
 	return nil

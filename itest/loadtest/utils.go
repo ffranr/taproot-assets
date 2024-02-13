@@ -17,6 +17,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/taprpc"
 	"github.com/lightninglabs/taproot-assets/taprpc/assetwalletrpc"
 	"github.com/lightninglabs/taproot-assets/taprpc/mintrpc"
+	"github.com/lightninglabs/taproot-assets/taprpc/rfqrpc"
 	"github.com/lightninglabs/taproot-assets/taprpc/universerpc"
 	"github.com/lightningnetwork/lnd/macaroons"
 	"github.com/stretchr/testify/require"
@@ -36,6 +37,7 @@ type rpcClient struct {
 	taprpc.TaprootAssetsClient
 	universerpc.UniverseClient
 	mintrpc.MintClient
+	rfqrpc.RfqClient
 	assetwalletrpc.AssetWalletClient
 }
 
@@ -168,6 +170,7 @@ func getTapClient(t *testing.T, ctx context.Context,
 	assetsClient := taprpc.NewTaprootAssetsClient(conn)
 	universeClient := universerpc.NewUniverseClient(conn)
 	mintMintClient := mintrpc.NewMintClient(conn)
+	rfqClient := rfqrpc.NewRfqClient(conn)
 	assetWalletClient := assetwalletrpc.NewAssetWalletClient(conn)
 
 	client := &rpcClient{
@@ -175,6 +178,7 @@ func getTapClient(t *testing.T, ctx context.Context,
 		TaprootAssetsClient: assetsClient,
 		UniverseClient:      universeClient,
 		MintClient:          mintMintClient,
+		RfqClient:           rfqClient,
 		AssetWalletClient:   assetWalletClient,
 	}
 

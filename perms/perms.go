@@ -204,6 +204,10 @@ var (
 			Entity: "universe",
 			Action: "read",
 		}},
+		"/rfqrpc.Rfq/UpsertAssetBuyOrder": {{
+			Entity: "rfq",
+			Action: "write",
+		}},
 		"/tapdevrpc.TapDev/ImportProof": {{
 			Entity: "proofs",
 			Action: "write",

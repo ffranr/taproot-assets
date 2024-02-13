@@ -330,10 +330,14 @@ func genServerConfig(cfg *Config, cfgLogger btclog.Logger,
 
 	multiNotifier := proof.NewMultiArchiveNotifier(assetStore, multiverse)
 
+	// Construct the RFQ manager.
+	priceOracle := rfqservice.NewMockPriceOracle(3600)
+
 	rfqManager, err := rfqservice.NewManager(
 		rfqservice.ManagerCfg{
 			PeerMessagePorter: chainBridge,
 			HtlcInterceptor:   chainBridge,
+			PriceOracle:       priceOracle,
 		},
 	)
 	if err != nil {

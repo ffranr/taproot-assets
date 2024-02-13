@@ -3,7 +3,16 @@ config_version: 3
 
 http:
   rules:
-    - selector: rfq.RfqPriceOracle.QueryExchangeRate
-      get: "/v1/taproot-assets/rfq/priceoracle/asset-id/{id.asset_id_str}"
+    - selector: rfqrpc.Rfq.UpsertAssetBuyOrder
+      post: "/v1/taproot-assets/rfq/buyorder/asset-id/{asset_specifier.asset_id_str}"
+      body: "*"
       additional_bindings:
-        - get: "/v1/taproot-assets/rfq/priceoracle/group-key/{id.group_key_str}"
+        - post: "/v1/taproot-assets/rfq/buyorder/group-key/{asset_specifier.group_key_str}"
+          body: "*"
+
+#    - selector: rfqrpc.Rfq.UpsertAssetSellOrder
+#      post: "/v1/taproot-assets/rfq/sellorder/asset-id/{asset_specifier.asset_id_str}"
+#      body: "*"
+#      additional_bindings:
+#        - post: "/v1/taproot-assets/rfq/sellorder/group-key/{asset_specifier.group_key_str}"
+#          body: "*"

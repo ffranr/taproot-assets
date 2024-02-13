@@ -21,7 +21,12 @@ const (
 )
 
 func TypeRecordAcceptID(id *ID) tlv.Record {
-	return tlv.MakePrimitiveRecord(TypeAcceptID, id)
+	const recordSize = 32
+
+	return tlv.MakeStaticRecord(
+		TypeAcceptID, id, recordSize,
+		IdEncoder, IdDecoder,
+	)
 }
 
 func TypeRecordAcceptAskingPrice(askingPrice *lnwire.MilliSatoshi) tlv.Record {
@@ -33,7 +38,8 @@ func TypeRecordAcceptAskingPrice(askingPrice *lnwire.MilliSatoshi) tlv.Record {
 
 func milliSatoshiEncoder(w io.Writer, val interface{}, buf *[8]byte) error {
 	if ms, ok := val.(*lnwire.MilliSatoshi); ok {
-		return tlv.EUint64(w, uint64(*ms), buf)
+		msUint64 := uint64(*ms)
+		return tlv.EUint64(w, &msUint64, buf)
 	}
 
 	return tlv.NewTypeForEncodingErr(val, "MilliSatoshi")
@@ -89,7 +95,7 @@ type acceptMsgData struct {
 func (q *acceptMsgData) encodeRecords() []tlv.Record {
 	var records []tlv.Record
 
-	// Add ID record.
+	// Add id record.
 	records = append(records, TypeRecordAcceptID(&q.ID))
 
 	// Add asking price record.
@@ -134,6 +140,17 @@ func (q *acceptMsgData) Decode(r io.Reader) error {
 		return err
 	}
 	return stream.Decode(r)
+}
+
+// Bytes encodes the structure into a TLV stream and returns the bytes.
+func (q *acceptMsgData) Bytes() ([]byte, error) {
+	var b bytes.Buffer
+	err := q.Encode(&b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
 }
 
 // Accept is a struct that represents an accepted quote message.
@@ -186,8 +203,8 @@ func NewAcceptFromWireMsg(wireMsg WireMessage) (*Accept, error) {
 
 // ShortChannelId returns the short channel ID of the quote accept.
 func (q *Accept) ShortChannelId() SerialisedScid {
-	// Given valid RFQ message ID, we then define a RFQ short chain ID
-	// (SCID) by taking the last 8 bytes of the RFQ message ID and
+	// Given valid RFQ message id, we then define a RFQ short chain id
+	// (SCID) by taking the last 8 bytes of the RFQ message id and
 	// interpreting them as a 64-bit integer.
 	scidBytes := q.ID[24:]
 
@@ -203,13 +220,11 @@ func (q *Accept) ShortChannelId() SerialisedScid {
 // signature over the message data.
 func (q *Accept) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
-	var buff *bytes.Buffer
-	err := q.acceptMsgData.Encode(buff)
+	msgDataBytes, err := q.acceptMsgData.Bytes()
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
 	}
-	msgDataBytes := buff.Bytes()
 
 	return WireMessage{
 		Peer:    q.Peer,

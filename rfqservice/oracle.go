@@ -2,115 +2,144 @@ package rfqservice
 
 import (
 	"context"
-	"crypto/tls"
-	"net/url"
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
 	"github.com/lightningnetwork/lnd/lnwire"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
-// OracleAskingPriceResponse is a struct that holds the price oracle's suggested
-// asking price for an asset.
-type OracleAskingPriceResponse struct {
-	// AskingPrice is the asking price of the quote.
-	AskingPrice *lnwire.MilliSatoshi
+// OracleAskResponse is a struct that holds the price oracle's suggested ask
+// price for an asset.
+type OracleAskResponse struct {
+	// AskPrice is the asking price of the quote.
+	AskPrice *lnwire.MilliSatoshi
 
-	// Expiry is the asking price expiry lifetime unix timestamp.
+	// Expiry is the price expiryDelay lifetime unix timestamp.
 	Expiry uint64
 
-	// Err is the error returned by the price oracle service.
+	// Err is an optional error returned by the price oracle service.
+	Err *rfqmsg.RejectErr
+}
+
+// OracleBidResponse is a struct that holds the price oracle's suggested bid
+// price for an asset.
+type OracleBidResponse struct {
+	// BidPrice is the suggested bid price for the asset amount.
+	BidPrice *lnwire.MilliSatoshi
+
+	// Expiry is the price expiryDelay lifetime unix timestamp.
+	Expiry uint64
+
+	// Err is an optional error returned by the price oracle service.
 	Err *rfqmsg.RejectErr
 }
 
 // PriceOracle is an interface that provides exchange rate information for
 // assets.
 type PriceOracle interface {
-	// QueryAskingPrice returns the asking price for the given asset amount.
-	QueryAskingPrice(ctx context.Context, assetId *asset.ID,
+	// QueryAskPrice returns an asking price for the given asset amount.
+	QueryAskPrice(ctx context.Context, assetId *asset.ID,
 		assetGroupKey *btcec.PublicKey, assetAmount uint64,
-		bidPrice *lnwire.MilliSatoshi) (*OracleAskingPriceResponse,
+		suggestedBidPrice *lnwire.MilliSatoshi) (*OracleAskResponse,
 		error)
+
+	// QueryBidPrice returns a bid price for the given asset amount.
+	QueryBidPrice(ctx context.Context, assetId *asset.ID,
+		assetGroupKey *btcec.PublicKey,
+		assetAmount uint64) (*OracleBidResponse, error)
 }
 
-// RpcPriceOracle is a price oracle that uses an external RPC server to get
-// exchange rate information.
-type RpcPriceOracle struct {
-}
-
-// serverDialOpts returns the set of server options needed to connect to the
-// price oracle RPC server using a TLS connection.
-func serverDialOpts() ([]grpc.DialOption, error) {
-	var opts []grpc.DialOption
-
-	// Skip TLS certificate verification.
-	tlsConfig := tls.Config{InsecureSkipVerify: true}
-	transportCredentials := credentials.NewTLS(&tlsConfig)
-	opts = append(opts, grpc.WithTransportCredentials(transportCredentials))
-
-	return opts, nil
-}
-
-// NewRpcPriceOracle creates a new RPC price oracle handle given the address
-// of the price oracle RPC server.
-func NewRpcPriceOracle(addr url.URL) (*RpcPriceOracle, error) {
-	//// Connect to the RPC server.
-	//dialOpts, err := serverDialOpts()
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//serverAddr := fmt.Sprintf("%s:%s", addr.Hostname(), addr.Port())
-	//conn, err := grpc.Dial(serverAddr, dialOpts...)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	return &RpcPriceOracle{}, nil
-}
-
-// QueryAskingPrice returns the asking price for the given asset amount.
-func (r *RpcPriceOracle) QueryAskingPrice(ctx context.Context,
-	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	bidPrice *lnwire.MilliSatoshi) (*OracleAskingPriceResponse, error) {
-
-	//// Call the external oracle service to get the exchange rate.
-	//conn := getClientConn(ctx, false)
-
-	return nil, nil
-}
-
-// Ensure that RpcPriceOracle implements the PriceOracle interface.
-var _ PriceOracle = (*RpcPriceOracle)(nil)
+//// RpcPriceOracle is a price oracle that uses an external RPC server to get
+//// exchange rate information.
+//type RpcPriceOracle struct {
+//}
+//
+//// serverDialOpts returns the set of server options needed to connect to the
+//// price oracle RPC server using a TLS connection.
+//func serverDialOpts() ([]grpc.DialOption, error) {
+//	var opts []grpc.DialOption
+//
+//	// Skip TLS certificate verification.
+//	tlsConfig := tls.Config{InsecureSkipVerify: true}
+//	transportCredentials := credentials.NewTLS(&tlsConfig)
+//	opts = append(opts, grpc.WithTransportCredentials(transportCredentials))
+//
+//	return opts, nil
+//}
+//
+//// NewRpcPriceOracle creates a new RPC price oracle handle given the address
+//// of the price oracle RPC server.
+//func NewRpcPriceOracle(addr url.URL) (*RpcPriceOracle, error) {
+//	//// Connect to the RPC server.
+//	//dialOpts, err := serverDialOpts()
+//	//if err != nil {
+//	//	return nil, err
+//	//}
+//	//
+//	//serverAddr := fmt.Sprintf("%s:%s", addr.Hostname(), addr.Port())
+//	//conn, err := grpc.Dial(serverAddr, dialOpts...)
+//	//if err != nil {
+//	//	return nil, err
+//	//}
+//
+//	return &RpcPriceOracle{}, nil
+//}
+//
+//// QueryAskingPrice returns the asking price for the given asset amount.
+//func (r *RpcPriceOracle) QueryAskingPrice(ctx context.Context,
+//	assetId *asset.ID, assetGroupKey *btcec.PublicKey, assetAmount uint64,
+//	bidPrice *lnwire.MilliSatoshi) (*OracleAskResponse, error) {
+//
+//	//// Call the external oracle service to get the exchange rate.
+//	//conn := getClientConn(ctx, false)
+//
+//	return nil, nil
+//}
+//
+//// Ensure that RpcPriceOracle implements the PriceOracle interface.
+//var _ PriceOracle = (*RpcPriceOracle)(nil)
 
 // MockPriceOracle is a mock implementation of the PriceOracle interface.
 // It returns the suggested rate as the exchange rate.
 type MockPriceOracle struct {
-	rateLifetime uint64
+	expiryDelay uint64
 }
 
 // NewMockPriceOracle creates a new mock price oracle.
-func NewMockPriceOracle(rateLifetime uint64) *MockPriceOracle {
+func NewMockPriceOracle(expiryDelay uint64) *MockPriceOracle {
 	return &MockPriceOracle{
-		rateLifetime: rateLifetime,
+		expiryDelay: expiryDelay,
 	}
 }
 
-// QueryAskingPrice returns the asking price for the given asset amount.
-func (m *MockPriceOracle) QueryAskingPrice(_ context.Context,
+// QueryAskPrice returns the ask price for the given asset amount.
+func (m *MockPriceOracle) QueryAskPrice(_ context.Context,
 	_ *asset.ID, _ *btcec.PublicKey, _ uint64,
-	bidPrice *lnwire.MilliSatoshi) (*OracleAskingPriceResponse, error) {
+	suggestedBidPrice *lnwire.MilliSatoshi) (*OracleAskResponse, error) {
 
-	// Calculate the rate expiry lifetime.
-	expiry := uint64(time.Now().Unix()) + m.rateLifetime
+	// Calculate the rate expiryDelay lifetime.
+	expiry := uint64(time.Now().Unix()) + m.expiryDelay
 
-	return &OracleAskingPriceResponse{
-		AskingPrice: bidPrice,
-		Expiry:      expiry,
+	return &OracleAskResponse{
+		AskPrice: suggestedBidPrice,
+		Expiry:   expiry,
+	}, nil
+}
+
+// QueryBidPrice returns a bid price for the given asset amount.
+func (m *MockPriceOracle) QueryBidPrice(_ context.Context, _ *asset.ID,
+	_ *btcec.PublicKey, _ uint64) (*OracleBidResponse, error) {
+
+	// Calculate the rate expiryDelay lifetime.
+	expiry := uint64(time.Now().Unix()) + m.expiryDelay
+
+	bidPrice := lnwire.MilliSatoshi(42000)
+
+	return &OracleBidResponse{
+		BidPrice: &bidPrice,
+		Expiry:   expiry,
 	}, nil
 }
 

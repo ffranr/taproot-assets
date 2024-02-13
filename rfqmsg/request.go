@@ -2,6 +2,7 @@ package rfqmsg
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -25,8 +26,41 @@ const (
 )
 
 func TypeRecordRequestID(id *ID) tlv.Record {
-	idBytes := (*[32]byte)(id)
-	return tlv.MakePrimitiveRecord(TypeRequestID, idBytes)
+	const recordSize = 32
+
+	return tlv.MakeStaticRecord(
+		TypeRequestID, id, recordSize,
+		IdEncoder, IdDecoder,
+	)
+}
+
+func IdEncoder(w io.Writer, val any, buf *[8]byte) error {
+	if t, ok := val.(*ID); ok {
+		id := [32]byte(*t)
+		return tlv.EBytes32(w, &id, buf)
+	}
+
+	return tlv.NewTypeForEncodingErr(val, "MessageID")
+}
+
+func IdDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
+	const idBytesLen = 32
+
+	if typ, ok := val.(*ID); ok {
+		var idBytes [idBytesLen]byte
+
+		err := tlv.DBytes32(r, &idBytes, buf, idBytesLen)
+		if err != nil {
+			return err
+		}
+
+		id := ID(idBytes)
+
+		*typ = id
+		return nil
+	}
+
+	return tlv.NewTypeForDecodingErr(val, "MessageID", l, idBytesLen)
 }
 
 func TypeRecordRequestAssetID(assetID **asset.ID) tlv.Record {
@@ -34,20 +68,20 @@ func TypeRecordRequestAssetID(assetID **asset.ID) tlv.Record {
 
 	return tlv.MakeStaticRecord(
 		TypeRequestAssetID, assetID, recordSize,
-		IDEncoder, IDDecoder,
+		AssetIdEncoder, AssetIdDecoder,
 	)
 }
 
-func IDEncoder(w io.Writer, val any, buf *[8]byte) error {
+func AssetIdEncoder(w io.Writer, val any, buf *[8]byte) error {
 	if t, ok := val.(**asset.ID); ok {
 		id := [sha256.Size]byte(**t)
 		return tlv.EBytes32(w, &id, buf)
 	}
 
-	return tlv.NewTypeForEncodingErr(val, "AssetID")
+	return tlv.NewTypeForEncodingErr(val, "assetId")
 }
 
-func IDDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
+func AssetIdDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
 	const assetIDBytesLen = sha256.Size
 
 	if typ, ok := val.(**asset.ID); ok {
@@ -65,7 +99,7 @@ func IDDecoder(r io.Reader, val any, buf *[8]byte, l uint64) error {
 		return nil
 	}
 
-	return tlv.NewTypeForDecodingErr(val, "AssetID", l, sha256.Size)
+	return tlv.NewTypeForDecodingErr(val, "assetId", l, sha256.Size)
 }
 
 func TypeRecordRequestAssetGroupKey(groupKey **btcec.PublicKey) tlv.Record {
@@ -204,10 +238,17 @@ type Request struct {
 	requestMsgData
 }
 
-// NewRequestMsg creates a new instance of a quote request message.
-func NewRequestMsg(peer route.Vertex, id ID, assetID *asset.ID,
+// NewRequest creates a new quote request.
+func NewRequest(peer route.Vertex, assetID *asset.ID,
 	assetGroupKey *btcec.PublicKey, assetAmount uint64,
-	bidPrice lnwire.MilliSatoshi) Request {
+	bidPrice lnwire.MilliSatoshi) (Request, error) {
+
+	var id [32]byte
+	_, err := rand.Read(id[:])
+	if err != nil {
+		return Request{}, fmt.Errorf("unable to generate random "+
+			"quote request id: %w", err)
+	}
 
 	return Request{
 		Peer: peer,
@@ -218,7 +259,7 @@ func NewRequestMsg(peer route.Vertex, id ID, assetID *asset.ID,
 			AssetAmount:   assetAmount,
 			BidPrice:      bidPrice,
 		},
-	}
+	}, nil
 }
 
 // NewRequestMsgFromWire instantiates a new instance from a wire message.
@@ -259,13 +300,11 @@ func (q *Request) Validate() error {
 // ToWire returns a wire message with a serialized data field.
 func (q *Request) ToWire() (WireMessage, error) {
 	// Encode message data component as TLV bytes.
-	var buff *bytes.Buffer
-	err := q.requestMsgData.Encode(buff)
+	msgDataBytes, err := q.requestMsgData.Bytes()
 	if err != nil {
 		return WireMessage{}, fmt.Errorf("unable to encode message "+
 			"data: %w", err)
 	}
-	msgDataBytes := buff.Bytes()
 
 	return WireMessage{
 		Peer:    q.Peer,

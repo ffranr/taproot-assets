@@ -29,6 +29,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/mssmt"
 	"github.com/lightninglabs/taproot-assets/proof"
+	"github.com/lightninglabs/taproot-assets/rfqservice"
 	"github.com/lightninglabs/taproot-assets/rpcperms"
 	"github.com/lightninglabs/taproot-assets/tapdb"
 	"github.com/lightninglabs/taproot-assets/tapfreighter"
@@ -37,6 +38,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/taprpc"
 	wrpc "github.com/lightninglabs/taproot-assets/taprpc/assetwalletrpc"
 	"github.com/lightninglabs/taproot-assets/taprpc/mintrpc"
+	"github.com/lightninglabs/taproot-assets/taprpc/rfqrpc"
 	"github.com/lightninglabs/taproot-assets/taprpc/tapdevrpc"
 	unirpc "github.com/lightninglabs/taproot-assets/taprpc/universerpc"
 	"github.com/lightninglabs/taproot-assets/tapscript"
@@ -45,6 +47,8 @@ import (
 	"github.com/lightningnetwork/lnd/keychain"
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnwallet/chainfee"
+	"github.com/lightningnetwork/lnd/lnwire"
+	"github.com/lightningnetwork/lnd/routing/route"
 	"github.com/lightningnetwork/lnd/signal"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
@@ -106,6 +110,7 @@ type rpcServer struct {
 	taprpc.UnimplementedTaprootAssetsServer
 	wrpc.UnimplementedAssetWalletServer
 	mintrpc.UnimplementedMintServer
+	rfqrpc.UnimplementedRfqServer
 	unirpc.UnimplementedUniverseServer
 	tapdevrpc.UnimplementedTapDevServer
 
@@ -178,6 +183,7 @@ func (r *rpcServer) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	taprpc.RegisterTaprootAssetsServer(grpcServer, r)
 	wrpc.RegisterAssetWalletServer(grpcServer, r)
 	mintrpc.RegisterMintServer(grpcServer, r)
+	rfqrpc.RegisterRfqServer(grpcServer, r)
 	unirpc.RegisterUniverseServer(grpcServer, r)
 	tapdevrpc.RegisterGrpcServer(grpcServer, r)
 	return nil
@@ -4510,48 +4516,130 @@ func (r *rpcServer) RemoveUTXOLease(ctx context.Context,
 	return &wrpc.RemoveUTXOLeaseResponse{}, nil
 }
 
-//func (r *rpcServer) UpsertAssetSellOffer(ctx context.Context,
-//	in *taprpc.BurnAssetRequest) (*taprpc.BurnAssetResponse, error) {
-//
-//	var assetID asset.ID
-//	switch {
-//	case len(in.GetAssetId()) > 0:
-//		copy(assetID[:], in.GetAssetId())
-//
-//	case len(in.GetAssetIdStr()) > 0:
-//		assetIDBytes, err := hex.DecodeString(in.GetAssetIdStr())
-//		if err != nil {
-//			return nil, fmt.Errorf("error decoding asset ID: %w",
-//				err)
-//		}
-//
-//		copy(assetID[:], assetIDBytes)
-//
-//	default:
-//		return nil, fmt.Errorf("asset ID must be specified")
-//	}
-//
-//	var groupKey *btcec.PublicKey
-//	assetGroup, err := r.cfg.TapAddrBook.QueryAssetGroup(ctx, assetID)
-//	switch {
-//	case err == nil && assetGroup.GroupKey != nil:
-//		// We found the asset group, so we can use the group key to
-//		// burn the asset.
-//		groupKey = &assetGroup.GroupPubKey
-//	case errors.Is(err, address.ErrAssetGroupUnknown):
-//		// We don't know the asset group, so we'll try to burn the
-//		// asset using the asset ID only.
-//		rpcsLog.Debug("Asset group key not found, asset may not be " +
-//			"part of a group")
-//	case err != nil:
-//		return nil, fmt.Errorf("error querying asset group: %w", err)
-//	}
-//
-//	var serializedGroupKey []byte
-//	if groupKey != nil {
-//		serializedGroupKey = groupKey.SerializeCompressed()
-//	}
-//}
+// unmarshalAssetSpecifier unmarshals an asset specifier from the RPC form.
+func unmarshalAssetSpecifier(req *rfqrpc.AssetSpecifier) (*asset.ID,
+	*btcec.PublicKey, error) {
+
+	// Unmarshal the asset ID.
+	var assetID *asset.ID
+	switch {
+	case len(req.GetAssetId()) > 0:
+		var assetIdBytes [32]byte
+		copy(assetIdBytes[:], req.GetAssetId())
+		id := asset.ID(assetIdBytes)
+		assetID = &id
+
+	case len(req.GetAssetIdStr()) > 0:
+		assetIDBytes, err := hex.DecodeString(req.GetAssetIdStr())
+		if err != nil {
+			return nil, nil, fmt.Errorf("error decoding asset "+
+				"ID: %w", err)
+		}
+
+		copy(assetID[:], assetIDBytes)
+	}
+
+	// Unmarshal the group key.
+	var (
+		groupKeyBytes []byte
+		groupKey      *btcec.PublicKey
+
+		err error
+	)
+	switch {
+	case len(req.GetGroupKey()) > 0:
+		groupKeyBytes = req.GetGroupKey()
+		groupKey, err = btcec.ParsePubKey(groupKeyBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error parsing group "+
+				"key: %w", err)
+		}
+
+	case len(req.GetGroupKeyStr()) > 0:
+		groupKeyBytes, err := hex.DecodeString(
+			req.GetGroupKeyStr(),
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error decoding group "+
+				"key: %w", err)
+		}
+
+		groupKey, err = btcec.ParsePubKey(groupKeyBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error parsing group "+
+				"key: %w", err)
+		}
+	}
+
+	// Return an error if neither the asset ID nor the group key are
+	// specified.
+	if assetID == nil && groupKey == nil {
+		return nil, nil, fmt.Errorf("either asset ID or asset group " +
+			"key must be specified")
+	}
+
+	return assetID, groupKey, nil
+}
+
+// unmarshalAssetBuyOrder unmarshals an asset buy order from the RPC form.
+func unmarshalAssetBuyOrder(
+	req *rfqrpc.UpsertAssetBuyOrderRequest) (*rfqservice.BuyOrder, error) {
+
+	assetId, assetGroupKey, err := unmarshalAssetSpecifier(
+		req.AssetSpecifier,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling asset specifier: "+
+			"%w", err)
+	}
+
+	// Unmarshal the peer if specified.
+	var peer *route.Vertex
+
+	if req.Peer != nil {
+		var peerVertexBytes [33]byte
+		copy(peerVertexBytes[:], req.Peer)
+
+		pv, err := route.NewVertexFromBytes(peerVertexBytes[:])
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshalling peer "+
+				"route vertex: %w", err)
+		}
+
+		peer = &pv
+	}
+
+	return &rfqservice.BuyOrder{
+		AssetID:        assetId,
+		AssetGroupKey:  assetGroupKey,
+		MinAssetAmount: req.MinAssetAmount,
+		MaxBid:         lnwire.MilliSatoshi(req.MaxBid),
+		Expiry:         req.Expiry,
+		Peer:           peer,
+	}, nil
+}
+
+// UpsertAssetBuyOrder upserts a new buy order for the given asset into the RFQ
+// manager.
+func (r *rpcServer) UpsertAssetBuyOrder(_ context.Context,
+	req *rfqrpc.UpsertAssetBuyOrderRequest) (*rfqrpc.UpsertAssetBuyOrderResponse,
+	error) {
+
+	// Unmarshal the buy order from the RPC form.
+	buyOrder, err := unmarshalAssetBuyOrder(req)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling buy order: %w", err)
+	}
+
+	// Upsert the buy order into the RFQ manager.
+	err = r.cfg.RfqManager.UpsertAssetBuyOrder(*buyOrder)
+	if err != nil {
+		return nil, fmt.Errorf("error upserting buy order into RFQ "+
+			"manager: %w", err)
+	}
+
+	return &rfqrpc.UpsertAssetBuyOrderResponse{}, nil
+}
 
 // MarshalAssetFedSyncCfg returns an RPC ready asset specific federation sync
 // config.
