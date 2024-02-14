@@ -1,12 +1,19 @@
 package rfqmsg
 
 import (
+	"encoding/hex"
+
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 )
 
 // ID is the identifier for a RFQ message.
 type ID [32]byte
+
+// String returns the string representation of the ID.
+func (id ID) String() string {
+	return hex.EncodeToString(id[:])
+}
 
 // SerialisedScid is a serialised short channel id (SCID).
 type SerialisedScid uint64
@@ -48,7 +55,8 @@ type WireMessage struct {
 // IncomingMsg is an interface that represents an inbound wire message
 // that has been received from a peer.
 type IncomingMsg interface {
-	DestinationPeer() route.Vertex
+	// MsgPeer returns the peer that sent the message.
+	MsgPeer() route.Vertex
 }
 
 // OutgoingMsg is an interface that represents an outbound wire message
@@ -57,5 +65,6 @@ type OutgoingMsg interface {
 	// ToWire returns a wire message with a serialized data field.
 	ToWire() (WireMessage, error)
 
-	DestinationPeer() route.Vertex
+	// MsgPeer returns the destination peer.
+	MsgPeer() route.Vertex
 }

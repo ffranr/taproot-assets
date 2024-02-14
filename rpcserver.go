@@ -4632,6 +4632,13 @@ func (r *rpcServer) UpsertAssetBuyOrder(_ context.Context,
 		return nil, fmt.Errorf("error unmarshalling buy order: %w", err)
 	}
 
+	var peer string
+	if buyOrder.Peer != nil {
+		peer = buyOrder.Peer.String()
+	}
+	rpcsLog.Debugf("[UpsertAssetBuyOrder]: upserting buy order "+
+		"(dest_peer=%s)", peer)
+
 	// Upsert the buy order into the RFQ manager.
 	err = r.cfg.RfqManager.UpsertAssetBuyOrder(*buyOrder)
 	if err != nil {
@@ -4647,7 +4654,7 @@ func marshalAcceptedQuotes(
 	acceptedQuotes map[rfqservice.SerialisedScid]rfqmsg.Accept) []*rfqrpc.AcceptedQuote {
 
 	// Marshal the accepted quotes into the RPC form.
-	rpcQuotes := make([]*rfqrpc.AcceptedQuote, len(acceptedQuotes))
+	rpcQuotes := make([]*rfqrpc.AcceptedQuote, 0)
 	for scid, quote := range acceptedQuotes {
 		rpcQuote := &rfqrpc.AcceptedQuote{
 			Peer:        quote.Peer.String(),

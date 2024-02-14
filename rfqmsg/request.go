@@ -313,7 +313,7 @@ func (q *Request) ToWire() (WireMessage, error) {
 	}, nil
 }
 
-func (q *Request) DestinationPeer() route.Vertex {
+func (q *Request) MsgPeer() route.Vertex {
 	return q.Peer
 }
 

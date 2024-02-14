@@ -294,7 +294,17 @@ func setupHarnesses(t *testing.T, ht *harnessTest,
 	proofCourierType proof.CourierType) (*tapdHarness,
 	*universeServerHarness, proof.CourierHarness) {
 
-	universeServer := newUniverseServerHarness(t, ht, lndHarness.Bob)
+	// Create and start a new universe server harness (which is effectively
+	// a tapd node).
+	//
+	// Create a new LND node for the universe server.
+	uniServerLndHarness := lndHarness.NewNode("uni-server-lnd", nil)
+
+	// Ensure that the new LND node is connected to the standby LND nodes.
+	lndHarness.EnsureConnected(lndHarness.Alice, uniServerLndHarness)
+	lndHarness.EnsureConnected(lndHarness.Bob, uniServerLndHarness)
+
+	universeServer := newUniverseServerHarness(t, ht, uniServerLndHarness)
 
 	t.Logf("Starting universe server harness, listening on %v",
 		universeServer.ListenAddr)
@@ -320,7 +330,7 @@ func setupHarnesses(t *testing.T, ht *harnessTest,
 		proofCourier = universeServer
 	}
 
-	// Create a tapd that uses Bob and connect it to the universe server.
+	// Create a tapd that uses Alice and connect it to the universe server.
 	tapdHarness := setupTapdHarness(
 		t, ht, lndHarness.Alice, universeServer,
 		func(params *tapdHarnessParams) {

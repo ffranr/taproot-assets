@@ -99,9 +99,12 @@ func (n *Negotiator) handlePriceOracleAskResponse(request rfqmsg.Request,
 			return fmt.Errorf("negotiator failed to add reject " +
 				"message to the outgoing messages channel")
 		}
+
+		return nil
 	}
 
-	// TODO(ffranr): Ensure that the expiryDelay time is valid and sufficient.
+	// TODO(ffranr): Ensure that the expiryDelay time is valid and
+	//  sufficient.
 
 	// If the asking price is not nil, then we can proceed to respond with
 	// an accept message.
@@ -137,6 +140,8 @@ func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
 			return fmt.Errorf("negotiator failed to send reject " +
 				"message")
 		}
+
+		return nil
 	}
 
 	// Query the price oracle in a separate goroutine in case it is a remote

@@ -68,6 +68,10 @@ func testRfqHtlcIntercept(t *harnessTest) {
 
 	alice, bob, carol := ts.alice, ts.bob, ts.carol
 
+	t.Logf("Alice: %v", alice.PubKeyStr)
+	t.Logf("Bob: %v", bob.PubKeyStr)
+	t.Logf("Carol: %v", carol.PubKeyStr)
+
 	// Set up a tapd node for Bob.
 	bobTapd := setupTapdHarness(t.t, t, bob, t.universeServer)
 	defer func() {
@@ -106,7 +110,10 @@ func testRfqHtlcIntercept(t *harnessTest) {
 			MinAssetAmount: 200,
 			MaxBid:         42000,
 			Expiry:         buyOrderExpiry,
-			Peer:           buyOrderDestPeer[:],
+
+			// Here we specify Bob as the destination peer for the
+			// buy order.
+			Peer: buyOrderDestPeer[:],
 		},
 	)
 	require.NoError(t.t, err, "unable to upsert asset buy order")
@@ -128,6 +135,7 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	// Get the short channel ID for the channel which Carol should use to
 	// make a payment to Bob.
 	acceptedQuote := acceptedQuotes.AcceptedQuotes[0]
+	t.Logf("Accepted quote scid: %d", acceptedQuote.Scid)
 	scid := lnwire.NewShortChanIDFromInt(acceptedQuote.Scid)
 
 	// Open and wait for channels.
@@ -188,7 +196,7 @@ func testRfqHtlcIntercept(t *harnessTest) {
 		},
 	}
 
-	paymentAmt := int64(1000)
+	paymentAmt := int64(42000)
 
 	// Prepare the test cases.
 	req := &lnrpc.Invoice{

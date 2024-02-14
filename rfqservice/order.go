@@ -60,7 +60,7 @@ func (c *ChannelRemit) CheckHtlcCompliance(
 	}
 
 	// Check that the HTLC amount is at least the minimum acceptable amount.
-	if htlc.AmountOutMsat <= c.MinimumChannelPayment {
+	if htlc.AmountOutMsat < c.MinimumChannelPayment {
 		return fmt.Errorf("htlc out amount is less than the remit's "+
 			"minimum (htlc_out_msat=%d, remit_min_msat=%d)",
 			htlc.AmountOutMsat, c.MinimumChannelPayment)
@@ -68,8 +68,8 @@ func (c *ChannelRemit) CheckHtlcCompliance(
 
 	// Lastly, check to ensure that the channel remit has not expired.
 	if time.Now().Unix() > int64(c.Expiry) {
-		return fmt.Errorf("channel remit has expired (expiryDelay=%d)",
-			c.Expiry)
+		return fmt.Errorf("channel remit has expired "+
+			"(expiry_unix_ts=%d)", c.Expiry)
 	}
 
 	return nil
@@ -157,7 +157,11 @@ func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 		}, nil
 	}
 
-	return nil, nil
+	log.Info("HTLC complies with channel remit. Accepting HTLC")
+
+	return &lndclient.InterceptedHtlcResponse{
+		Action: lndclient.InterceptorActionResume,
+	}, nil
 }
 
 // setupHtlcIntercept sets up HTLC interception.

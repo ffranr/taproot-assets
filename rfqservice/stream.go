@@ -3,11 +3,13 @@ package rfqservice
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
+	"github.com/lightningnetwork/lnd/routing/route"
 )
 
 // StreamHandlerCfg is a struct that holds the configuration parameters for the
@@ -17,6 +19,14 @@ type StreamHandlerCfg struct {
 	// provides the RFQ manager with the ability to send and receive raw
 	// peer messages.
 	PeerMessagePorter PeerMessagePorter
+
+	// LightningSelfId is the public key of the lightning node that the RFQ
+	// manager is associated with.
+	//
+	// TODO(ffranr): The tapd node was receiving wire messages that it sent.
+	//  This is a temporary fix to prevent the node from processing its own
+	//  messages.
+	LightningSelfId route.Vertex
 }
 
 // StreamHandler is a struct that handles incoming and outgoing peer RFQ stream
@@ -33,6 +43,8 @@ type StreamHandler struct {
 	// stream handler.
 	cfg StreamHandlerCfg
 
+	randId int
+
 	// recvRawMessages is a channel that receives incoming raw peer
 	// messages.
 	recvRawMessages <-chan lndclient.CustomMessage
@@ -42,8 +54,13 @@ type StreamHandler struct {
 	errRecvRawMessages <-chan error
 
 	// incomingMessages is a channel which is populated with incoming
-	// (received) RFQ messages.
+	// (received) RFQ messages. These messages have been extracted from the
+	// raw peer wire messages by the stream handler service.
 	incomingMessages chan<- rfqmsg.IncomingMsg
+
+	seenMessages map[string]struct{}
+
+	seenMessagesMtx sync.Mutex
 
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
@@ -60,17 +77,25 @@ func NewStreamHandler(ctx context.Context, cfg StreamHandlerCfg,
 	pPorter := cfg.PeerMessagePorter
 	msgChan, peerMsgErrChan, err := pPorter.SubscribeCustomMessages(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe to custom "+
-			"messages via message transfer handle: %w", err)
+		return nil, fmt.Errorf("failed to subscribe to wire "+
+			"messages via peer message porter: %w", err)
 	}
+
+	minRand := 100
+	maxRand := 1000
+	randId := rand.Intn(maxRand-minRand+1) + minRand
 
 	return &StreamHandler{
 		cfg: cfg,
+
+		randId: randId,
 
 		recvRawMessages:    msgChan,
 		errRecvRawMessages: peerMsgErrChan,
 
 		incomingMessages: incomingMessages,
+
+		seenMessages: make(map[string]struct{}),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -88,6 +113,28 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 		return fmt.Errorf("unable to create a quote request message "+
 			"from a wire message: %w", err)
 	}
+
+	if quoteRequest.Peer == h.cfg.LightningSelfId {
+		return nil
+	}
+
+	// If we have already seen this message, we will ignore it.
+	//
+	// TODO(ffranr): Why do messages get sent twice?
+	h.seenMessagesMtx.Lock()
+
+	if _, ok := h.seenMessages[quoteRequest.ID.String()]; ok {
+		return nil
+	}
+
+	// Mark the message as seen.
+	h.seenMessages[quoteRequest.ID.String()] = struct{}{}
+
+	h.seenMessagesMtx.Unlock()
+
+	log.Debugf("(%d) Stream handling incoming message (msg_type=%T, msg_id=%s, "+
+		"origin_peer=%s, self=%s)", h.randId, quoteRequest, quoteRequest.ID.String(),
+		quoteRequest.MsgPeer(), h.cfg.LightningSelfId)
 
 	// Send the quote request to the RFQ manager.
 	var msg rfqmsg.IncomingMsg = quoteRequest
@@ -108,12 +155,20 @@ func (h *StreamHandler) handleIncomingQuoteAccept(
 		return fmt.Errorf("unable to create a quote accept message "+
 			"from a wire message: %w", err)
 	}
-	quoteAccept = quoteAccept
+
+	log.Debugf("Stream handling incoming message (msg_type=%T, "+
+		"origin_peer=%s)", quoteAccept, quoteAccept.MsgPeer())
 
 	// TODO(ffranr): At this point, we need to validate that the quote
 	//  accept message is valid. We need to check that the quote accept
-	//  message is associated with a valid quote request. Finally, we need
-	//  to inform the RFQ manager that the quote request has been accepted.
+	//  message is associated with a valid quote request.
+
+	// Send the message to the RFQ manager.
+	var msg rfqmsg.IncomingMsg = quoteAccept
+	sendSuccess := fn.SendOrQuit(h.incomingMessages, msg, h.Quit)
+	if !sendSuccess {
+		return fmt.Errorf("RFQ stream handler shutting down")
+	}
 
 	return nil
 }
@@ -127,12 +182,20 @@ func (h *StreamHandler) handleIncomingQuoteReject(
 		return fmt.Errorf("unable to create a quote reject message "+
 			"from a wire message: %w", err)
 	}
-	quoteReject = quoteReject
+
+	log.Debugf("Stream handling incoming message (msg_type=%T, "+
+		"origin_peer=%s)", quoteReject, quoteReject.MsgPeer())
 
 	// TODO(ffranr): At this point, we need to validate that the quote
 	//  reject message is valid. We need to check that the quote reject
-	//  message is associated with a valid quote request. Finally, we need
-	//  to inform the RFQ manager that the quote request has been rejected.
+	//  message is associated with a valid quote request.
+
+	// Send the message to the RFQ manager.
+	var msg rfqmsg.IncomingMsg = quoteReject
+	sendSuccess := fn.SendOrQuit(h.incomingMessages, msg, h.Quit)
+	if !sendSuccess {
+		return fmt.Errorf("RFQ stream handler shutting down")
+	}
 
 	return nil
 }
@@ -176,6 +239,9 @@ func (h *StreamHandler) handleIncomingWireMessage(
 func (h *StreamHandler) HandleOutgoingMessage(
 	outgoingMsg rfqmsg.OutgoingMsg) error {
 
+	log.Debugf("Stream handling outgoing message (msg_type=%T, "+
+		"dest_peer=%s)", outgoingMsg, outgoingMsg.MsgPeer())
+
 	// Convert the outgoing message to a lndclient custom message.
 	wireMsg, err := outgoingMsg.ToWire()
 	if err != nil {
@@ -209,7 +275,7 @@ func (h *StreamHandler) mainEventLoop() {
 		select {
 		case rawMsg, ok := <-h.recvRawMessages:
 			if !ok {
-				log.Warnf("raw peer messages channel closed " +
+				log.Warnf("Raw peer messages channel closed " +
 					"unexpectedly")
 				return
 			}
@@ -225,15 +291,15 @@ func (h *StreamHandler) mainEventLoop() {
 
 			err := h.handleIncomingWireMessage(wireMsg)
 			if err != nil {
-				log.Warnf("Error handling raw custom "+
-					"message recieve event: %v", err)
+				log.Warnf("Error handling incoming wire "+
+					"message: %v", err)
 			}
 
 		case errSubCustomMessages := <-h.errRecvRawMessages:
 			// If we receive an error from the peer message
 			// subscription, we'll terminate the stream handler.
-			log.Warnf("Error received from RFQ stream handler: %v",
-				errSubCustomMessages)
+			log.Warnf("Error received from stream handler wire "+
+				"message channel: %v", errSubCustomMessages)
 
 		case <-h.Quit:
 			log.Debug("Received quit signal. Stopping stream " +

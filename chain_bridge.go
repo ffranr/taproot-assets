@@ -231,6 +231,13 @@ func (l *LndRpcChainBridge) InterceptHtlcs(
 	return l.lnd.Router.InterceptHtlcs(ctx, handler)
 }
 
+// GetInfo returns the current information concerning the state of the lnd node.
+func (l *LndRpcChainBridge) GetInfo(
+	ctx context.Context) (*lndclient.Info, error) {
+
+	return l.lnd.Client.GetInfo(ctx)
+}
+
 // A compile time assertion to ensure LndRpcChainBridge meets the
 // tapgarden.ChainBridge interface.
 var _ tapgarden.ChainBridge = (*LndRpcChainBridge)(nil)

@@ -232,7 +232,7 @@ func (q *Accept) ToWire() (WireMessage, error) {
 	}, nil
 }
 
-func (q *Accept) DestinationPeer() route.Vertex {
+func (q *Accept) MsgPeer() route.Vertex {
 	return q.Peer
 }
 

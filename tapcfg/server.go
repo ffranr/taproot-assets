@@ -333,11 +333,17 @@ func genServerConfig(cfg *Config, cfgLogger btclog.Logger,
 	// Construct the RFQ manager.
 	priceOracle := rfqservice.NewMockPriceOracle(3600)
 
+	lndInfo, err := chainBridge.GetInfo(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("unable to get lnd info: %v", err)
+	}
+
 	rfqManager, err := rfqservice.NewManager(
 		rfqservice.ManagerCfg{
 			PeerMessagePorter: chainBridge,
 			HtlcInterceptor:   chainBridge,
 			PriceOracle:       priceOracle,
+			LightningSelfId:   lndInfo.IdentityPubkey,
 		},
 	)
 	if err != nil {

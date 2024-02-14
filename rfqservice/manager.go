@@ -38,6 +38,14 @@ type ManagerCfg struct {
 	// PriceOracle is the price oracle that the RFQ manager will use to
 	// determine whether a quote is accepted or rejected.
 	PriceOracle PriceOracle
+
+	// LightningSelfId is the public key of the lightning node that the RFQ
+	// manager is associated with.
+	//
+	// TODO(ffranr): The tapd node was receiving wire messages that it sent.
+	//  This is a temporary fix to prevent the node from processing its own
+	//  messages.
+	LightningSelfId route.Vertex
 }
 
 // Manager is a struct that manages the request for quote (RFQ) system.
@@ -120,6 +128,7 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	// Initialise and start the peer message stream handler.
 	streamHandlerCfg := StreamHandlerCfg{
 		PeerMessagePorter: m.cfg.PeerMessagePorter,
+		LightningSelfId:   m.cfg.LightningSelfId,
 	}
 	m.streamHandler, err = NewStreamHandler(
 		ctx, streamHandlerCfg, m.incomingMessages,
@@ -234,7 +243,7 @@ func (m *Manager) stopSubsystems() error {
 func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 	// Perform type specific handling of the incoming message.
 	//
-	// TODO(ffranr): handle incoming accept and reject messages.
+	// TODO(ffranr): handle incoming reject messages.
 	switch msg := incomingMsg.(type) {
 	case *rfqmsg.Request:
 		err := m.negotiator.HandleIncomingQuoteRequest(*msg)
@@ -242,11 +251,11 @@ func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 			return fmt.Errorf("error handling incoming quote "+
 				"request: %w", err)
 		}
+
 	case *rfqmsg.Accept:
 		// The quote request has been accepted. Store accepted quote
-		// so that it can be used by our sending lightning node.
-		log.Debugf("Received accept message from peer: %v", msg.Peer)
-
+		// so that it can be used to send a payment by our lightning
+		// node.
 		m.peerAcceptedQuotesMtx.Lock()
 		defer m.peerAcceptedQuotesMtx.Unlock()
 
@@ -288,10 +297,10 @@ func (m *Manager) mainEventLoop() {
 		select {
 		// Handle incoming message.
 		case incomingMsg := <-m.incomingMessages:
-			peer := incomingMsg.DestinationPeer()
-			log.Debugf("RFQ manager has received an incoming "+
-				"message (msg_type=%T, dest_peer=%s)",
-				incomingMsg, peer.String())
+			peer := incomingMsg.MsgPeer()
+			log.Debugf("Manager handling incoming message "+
+				"(msg_type=%T, origin_peer=%s)",
+				incomingMsg, peer)
 
 			err := m.handleIncomingMessage(incomingMsg)
 			if err != nil {
@@ -301,9 +310,9 @@ func (m *Manager) mainEventLoop() {
 
 		// Handle outgoing message.
 		case outgoingMsg := <-m.outgoingMessages:
-			peer := outgoingMsg.DestinationPeer()
-			log.Debugf("RFQ manager has received an outgoing "+
-				"message (msg_type=%T, dest_peer=%s)",
+			peer := outgoingMsg.MsgPeer()
+			log.Debugf("Manager handling outgoing message "+
+				"(msg_type=%T, dest_peer=%s)",
 				outgoingMsg, peer.String())
 
 			err := m.handleOutgoingMessage(outgoingMsg)

@@ -219,7 +219,7 @@ func (q *Reject) ToWire() (WireMessage, error) {
 	}, nil
 }
 
-func (q *Reject) DestinationPeer() route.Vertex {
+func (q *Reject) MsgPeer() route.Vertex {
 	return q.Peer
 }
 
