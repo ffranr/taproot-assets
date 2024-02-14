@@ -290,20 +290,12 @@ func nextAvailablePort() int {
 // setupHarnesses creates new server and client harnesses that are connected
 // to each other through an in-memory gRPC connection.
 func setupHarnesses(t *testing.T, ht *harnessTest,
-	lndHarness *lntest.HarnessTest,
+	lndHarness *lntest.HarnessTest, uniServerLndHarness *node.HarnessNode,
 	proofCourierType proof.CourierType) (*tapdHarness,
 	*universeServerHarness, proof.CourierHarness) {
 
-	// Create and start a new universe server harness (which is effectively
-	// a tapd node).
-	//
-	// Create a new LND node for the universe server.
-	uniServerLndHarness := lndHarness.NewNode("uni-server-lnd", nil)
-
-	// Ensure that the new LND node is connected to the standby LND nodes.
-	lndHarness.EnsureConnected(lndHarness.Alice, uniServerLndHarness)
-	lndHarness.EnsureConnected(lndHarness.Bob, uniServerLndHarness)
-
+	// Create a new universe server harness and start it.
+	t.Log("Starting universe server harness")
 	universeServer := newUniverseServerHarness(t, ht, uniServerLndHarness)
 
 	t.Logf("Starting universe server harness, listening on %v",
