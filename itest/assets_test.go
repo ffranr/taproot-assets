@@ -106,7 +106,7 @@ func testMintAssets(t *harnessTest) {
 	AssertMintingProofs(t.t, t.tapd, simpleAssets, rpcSimpleAssets)
 	AssertMintingProofs(t.t, t.tapd, issuableAssets, rpcIssuableAssets)
 
-	// Make sure we can't mint assets with too much meta data.
+	// Make sure we can'testHarness mint assets with too much meta data.
 	invalidRequest := CopyRequest(simpleAssets[0])
 	invalidRequest.Asset.AssetMeta.Data = make(
 		[]byte, proof.MetaDataMaxSizeBytes+1,
@@ -131,8 +131,8 @@ func testMintAssets(t *harnessTest) {
 	)
 	defer shutdownAndAssert(t, charlie, secondTapd)
 
-	// We import the assets into a node that doesn't have the keys to spend
-	// them, so we don't expect them to show up with script_key_is_local set
+	// We import the assets into a node that doesn'testHarness have the keys to spend
+	// them, so we don'testHarness expect them to show up with script_key_is_local set
 	// to true in the list of assets.
 	transferAssetProofs(t, t.tapd, secondTapd, allAssets, false)
 }
@@ -146,9 +146,9 @@ func transferAssetProofs(t *harnessTest, src, dst *tapdHarness,
 	ctxt, cancel := context.WithTimeout(ctxb, defaultWaitTimeout)
 	defer cancel()
 
-	// TODO(roasbeef): modify import call, can't work as is
+	// TODO(roasbeef): modify import call, can'testHarness work as is
 	//  * proof file only contains the tweaked script key
-	//  * from that we don't know the internal key
+	//  * from that we don'testHarness know the internal key
 	//  * we can import the proof but it's useless as is, but lets this
 	//  itest work
 

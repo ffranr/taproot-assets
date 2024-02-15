@@ -91,7 +91,7 @@ func testPsbtScriptHashLockSend(t *harnessTest) {
 	)
 	require.NoError(t.t, err)
 
-	// We don't need to sign anything as we're going to spend with a
+	// We don'testHarness need to sign anything as we're going to spend with a
 	// pre-image to the script lock.
 	controlBlockBytes, err := tapscript.ControlBlock.ToBytes()
 	require.NoError(t.t, err)
@@ -142,7 +142,7 @@ func testPsbtScriptHashLockSend(t *harnessTest) {
 
 	assetsJSON, err := formatProtoJSON(aliceAssets)
 	require.NoError(t.t, err)
-	t.Logf("Got alice assets: %s", assetsJSON)
+	t.Logf("Got AliceLnd assets: %s", assetsJSON)
 }
 
 // testPsbtScriptCheckSigSend tests that we can properly send assets with a sig
@@ -268,7 +268,7 @@ func testPsbtScriptCheckSigSend(t *harnessTest) {
 
 	assetsJSON, err := formatProtoJSON(aliceAssets)
 	require.NoError(t.t, err)
-	t.Logf("Got alice assets: %s", assetsJSON)
+	t.Logf("Got AliceLnd assets: %s", assetsJSON)
 }
 
 // testPsbtNormalInteractiveFullValueSend tests that we can properly send normal
@@ -660,7 +660,7 @@ func runPsbtInteractiveSplitSendTest(ctxt context.Context, t *harnessTest,
 		// expected assets is different, since the initial sender always
 		// has the passive asset left. We start with 5k units for the
 		// active asset and 123 units for the passive assets.
-		// 	i	alice			send	     bob
+		// 	i	AliceLnd			send	     BobLnd
 		//	--------------------------------------------------------
 		// 	0	123, 200		4.8k ->	     4800
 		// 	1	123, 200, 2400		<- 2.4k	     2400
@@ -743,8 +743,8 @@ func testPsbtInteractiveTapscriptSibling(t *harnessTest) {
 	preimage := commitment.NewPreimageFromLeaf(siblingLeaf)
 	vPkt.Outputs[0].AnchorOutputTapscriptSibling = preimage
 
-	// Next, we'll attempt to complete a transfer with PSBTs from alice to
-	// bob, using the partial amount.
+	// Next, we'll attempt to complete a transfer with PSBTs from AliceLnd to
+	// BobLnd, using the partial amount.
 	fundResp := fundPacket(t, alice, vPkt)
 	signResp, err := alice.SignVirtualPsbt(
 		ctxt, &wrpc.SignVirtualPsbtRequest{
@@ -791,7 +791,7 @@ func testPsbtInteractiveTapscriptSibling(t *harnessTest) {
 
 	assetsJSON, err := formatProtoJSON(receiverAssets)
 	require.NoError(t.t, err)
-	t.Logf("Got bob assets: %s", assetsJSON)
+	t.Logf("Got BobLnd assets: %s", assetsJSON)
 
 	// And finally, make sure we can spend the asset again.
 	sendAssetAndAssert(

@@ -15,7 +15,7 @@ import (
 // testReOrgMint tests that when a re-org occurs, minted asset proofs are
 // updated accordingly.
 func testReOrgMint(t *harnessTest) {
-	// First, we'll mint a few assets but don't confirm the batch TX.
+	// First, we'll mint a few assets but don'testHarness confirm the batch TX.
 	mintRequests := []*mintrpc.MintAssetRequest{
 		issuableAssets[0], issuableAssets[1],
 	}

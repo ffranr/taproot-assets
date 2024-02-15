@@ -331,7 +331,7 @@ func (hs *tapdHarness) start(expectErrExit bool) error {
 
 // stop shuts down the tapd server and deletes its temporary data directory.
 func (hs *tapdHarness) stop(deleteData bool) error {
-	// Don't return the error immediately if stopping goes wrong, always
+	// Don'testHarness return the error immediately if stopping goes wrong, always
 	// remove the temp directory.
 	err := hs.server.Stop()
 	if deleteData {

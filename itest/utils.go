@@ -283,7 +283,7 @@ func MintAssetUnconfirmed(t *testing.T, minerClient *rpcclient.Client,
 	)
 	require.NoError(t, err)
 
-	// Make sure the assets were all minted within the same anchor but don't
+	// Make sure the assets were all minted within the same anchor but don'testHarness
 	// yet have a block hash associated with them.
 	listRespUnconfirmed, err := tapClient.ListAssets(
 		ctxt, &taprpc.ListAssetRequest{},

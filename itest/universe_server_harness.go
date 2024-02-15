@@ -43,7 +43,7 @@ func (h *universeServerHarness) Start(_ chan error) error {
 
 // Stop stops the service.
 func (h *universeServerHarness) Stop() error {
-	// Don't delete temporary data on stop. This will allow us to cleanly
+	// Don'testHarness delete temporary data on stop. This will allow us to cleanly
 	// restart the service mid-test.
 	return h.service.stop(false)
 }

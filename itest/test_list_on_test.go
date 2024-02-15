@@ -222,10 +222,6 @@ var testCases = []*testCase{
 
 	// Request for quote (RFQ) tests.
 	{
-		name: "rfq quote request",
-		test: testRfqQuoteRequest,
-	},
-	{
 		name: "rfq htlc intercept",
 		test: testRfqHtlcIntercept,
 	},

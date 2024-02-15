@@ -344,7 +344,7 @@ func testMintWithGroupKeyErrors(t *harnessTest) {
 	// The node must have information on the group to reissue, so this
 	// minting request must fail on the second node.
 	_, err = secondTapd.MintAsset(ctxb, reissueRequest)
-	require.ErrorContains(t.t, err, "can't sign")
+	require.ErrorContains(t.t, err, "can'testHarness sign")
 
 	// Send the minted collectible to the second node so that it imports
 	// the asset group.
@@ -365,5 +365,5 @@ func testMintWithGroupKeyErrors(t *harnessTest) {
 	// A re-issuance with the second node should still fail because the
 	// group key was not created by that node.
 	_, err = secondTapd.MintAsset(ctxb, reissueRequest)
-	require.ErrorContains(t.t, err, "can't sign with group key")
+	require.ErrorContains(t.t, err, "can'testHarness sign with group key")
 }

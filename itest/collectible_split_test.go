@@ -177,7 +177,7 @@ func testCollectibleSend(t *harnessTest) {
 
 	assetsJSON, err := formatProtoJSON(aliceAssetsResp)
 	require.NoError(t.t, err)
-	t.Logf("Got alice assets: %s", assetsJSON)
+	t.Logf("Got AliceLnd assets: %s", assetsJSON)
 
 	// Finally, make sure we can still send out the passive asset.
 	passiveGen := rpcAssets[1].AssetGenesis
@@ -450,14 +450,14 @@ func pickSendNode(t *testing.T, ctx context.Context, minBalance uint64,
 		return send, receive, true
 	}
 
-	// If we get here, the send node doesn't have enough balance. We'll try
+	// If we get here, the send node doesn'testHarness have enough balance. We'll try
 	// the other one.
 	send, receive = receive, send
 	if send.assetIDWithBalance(t, ctx, minBalance, assetType) != nil {
 		return send, receive, true
 	}
 
-	// None of the nodes have enough balance. We can't run the send test
+	// None of the nodes have enough balance. We can'testHarness run the send test
 	// currently.
 	return nil, nil, false
 }

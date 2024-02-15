@@ -881,7 +881,7 @@ func AssertAsset(t *testing.T, expected, actual *taprpc.Asset) {
 	require.Equal(t, expected.AssetGroup == nil, actual.AssetGroup == nil)
 	require.Equal(t, expected.PrevWitnesses, actual.PrevWitnesses)
 
-	// The raw key isn't always set as that's not contained in proofs for
+	// The raw key isn'testHarness always set as that's not contained in proofs for
 	// example.
 	if expected.AssetGroup != nil {
 		require.Equal(
