@@ -29,8 +29,8 @@ import (
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/mssmt"
 	"github.com/lightninglabs/taproot-assets/proof"
+	"github.com/lightninglabs/taproot-assets/rfq"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
-	"github.com/lightninglabs/taproot-assets/rfqservice"
 	"github.com/lightninglabs/taproot-assets/rpcperms"
 	"github.com/lightninglabs/taproot-assets/tapdb"
 	"github.com/lightninglabs/taproot-assets/tapfreighter"
@@ -4584,7 +4584,7 @@ func unmarshalAssetSpecifier(req *rfqrpc.AssetSpecifier) (*asset.ID,
 
 // unmarshalAssetBuyOrder unmarshals an asset buy order from the RPC form.
 func unmarshalAssetBuyOrder(
-	req *rfqrpc.UpsertAssetBuyOrderRequest) (*rfqservice.BuyOrder, error) {
+	req *rfqrpc.UpsertAssetBuyOrderRequest) (*rfq.BuyOrder, error) {
 
 	assetId, assetGroupKey, err := unmarshalAssetSpecifier(
 		req.AssetSpecifier,
@@ -4610,7 +4610,7 @@ func unmarshalAssetBuyOrder(
 		peer = &pv
 	}
 
-	return &rfqservice.BuyOrder{
+	return &rfq.BuyOrder{
 		AssetID:        assetId,
 		AssetGroupKey:  assetGroupKey,
 		MinAssetAmount: req.MinAssetAmount,
@@ -4651,7 +4651,7 @@ func (r *rpcServer) UpsertAssetBuyOrder(_ context.Context,
 
 // marshalAcceptedQuotes marshals a map of accepted quotes into the RPC form.
 func marshalAcceptedQuotes(
-	acceptedQuotes map[rfqservice.SerialisedScid]rfqmsg.Accept) []*rfqrpc.AcceptedQuote {
+	acceptedQuotes map[rfq.SerialisedScid]rfqmsg.Accept) []*rfqrpc.AcceptedQuote {
 
 	// Marshal the accepted quotes into the RPC form.
 	rpcQuotes := make([]*rfqrpc.AcceptedQuote, 0)

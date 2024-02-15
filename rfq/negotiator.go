@@ -1,4 +1,4 @@
-package rfqservice
+package rfq
 
 import (
 	"encoding/hex"
