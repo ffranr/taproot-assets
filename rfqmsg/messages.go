@@ -65,6 +65,6 @@ type OutgoingMsg interface {
 	// ToWire returns a wire message with a serialized data field.
 	ToWire() (WireMessage, error)
 
-	// MsgPeer returns the destination peer.
+	// MsgPeer returns the destination peer for the subject message.
 	MsgPeer() route.Vertex
 }

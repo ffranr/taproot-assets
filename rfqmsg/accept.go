@@ -233,6 +233,7 @@ func (q *Accept) ToWire() (WireMessage, error) {
 	}, nil
 }
 
+// MsgPeer returns the destination peer for the subject message.
 func (q *Accept) MsgPeer() route.Vertex {
 	return q.Peer
 }
