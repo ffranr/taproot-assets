@@ -113,7 +113,8 @@ var (
 // rejectMsgData is a struct that represents the data field of a quote
 // reject message.
 type rejectMsgData struct {
-	// ID is the unique identifier of the request for quote (RFQ).
+	// ID represents the unique identifier of the quote request message that
+	// this response is associated with.
 	ID ID
 
 	// Err is the error code and message that provides the reason for the
@@ -177,11 +178,11 @@ type Reject struct {
 }
 
 // NewRejectMsg creates a new instance of a quote reject message.
-func NewRejectMsg(peer route.Vertex, id ID, rejectErr RejectErr) Reject {
+func NewRejectMsg(request Request, rejectErr RejectErr) Reject {
 	return Reject{
-		Peer: peer,
+		Peer: request.Peer,
 		rejectMsgData: rejectMsgData{
-			ID:  id,
+			ID:  request.ID,
 			Err: rejectErr,
 		},
 	}

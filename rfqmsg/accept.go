@@ -14,10 +14,10 @@ import (
 const (
 	// Accept message type field TLV types.
 
-	TypeAcceptID          tlv.Type = 0
-	TypeAcceptAskingPrice tlv.Type = 2
-	TypeAcceptExpiry      tlv.Type = 4
-	TypeAcceptSignature   tlv.Type = 6
+	TypeAcceptID        tlv.Type = 0
+	TypeAcceptAskPrice  tlv.Type = 2
+	TypeAcceptExpiry    tlv.Type = 4
+	TypeAcceptSignature tlv.Type = 6
 )
 
 func TypeRecordAcceptID(id *ID) tlv.Record {
@@ -28,9 +28,9 @@ func TypeRecordAcceptID(id *ID) tlv.Record {
 	)
 }
 
-func TypeRecordAcceptAskingPrice(askingPrice *lnwire.MilliSatoshi) tlv.Record {
+func TypeRecordAcceptAskPrice(askPrice *lnwire.MilliSatoshi) tlv.Record {
 	return tlv.MakeStaticRecord(
-		TypeAcceptAskingPrice, askingPrice, 8, milliSatoshiEncoder,
+		TypeAcceptAskPrice, askPrice, 8, milliSatoshiEncoder,
 		milliSatoshiDecoder,
 	)
 }
@@ -76,11 +76,12 @@ func TypeRecordAcceptSig(sig *[64]byte) tlv.Record {
 // acceptMsgData is a struct that represents the data field of a quote
 // accept message.
 type acceptMsgData struct {
-	// ID is the unique identifier of the request for quote (RFQ).
+	// ID represents the unique identifier of the quote request message that
+	// this response is associated with.
 	ID ID
 
-	// AskingPrice is the asking price of the quote.
-	AskingPrice lnwire.MilliSatoshi
+	// AskPrice is the asking price of the quote.
+	AskPrice lnwire.MilliSatoshi
 
 	// Expiry is the asking price expiry lifetime unix timestamp.
 	Expiry uint64
@@ -97,8 +98,8 @@ func (q *acceptMsgData) encodeRecords() []tlv.Record {
 	// Add id record.
 	records = append(records, TypeRecordAcceptID(&q.ID))
 
-	// Add asking price record.
-	records = append(records, TypeRecordAcceptAskingPrice(&q.AskingPrice))
+	// Add ask price record.
+	records = append(records, TypeRecordAcceptAskPrice(&q.AskPrice))
 
 	// Add expiry record.
 	records = append(
@@ -126,7 +127,7 @@ func (q *acceptMsgData) Encode(writer io.Writer) error {
 func (q *acceptMsgData) decodeRecords() []tlv.Record {
 	return []tlv.Record{
 		TypeRecordAcceptID(&q.ID),
-		TypeRecordAcceptAskingPrice(&q.AskingPrice),
+		TypeRecordAcceptAskPrice(&q.AskPrice),
 		TypeRecordAcceptExpiry(&q.Expiry),
 		TypeRecordAcceptSig(&q.sig),
 	}
@@ -167,7 +168,7 @@ type Accept struct {
 
 // NewAcceptFromRequest creates a new instance of a quote accept message given
 // a quote request message.
-func NewAcceptFromRequest(request Request, askingPrice lnwire.MilliSatoshi,
+func NewAcceptFromRequest(request Request, askPrice lnwire.MilliSatoshi,
 	expiry uint64) Accept {
 
 	var sig [64]byte
@@ -176,10 +177,10 @@ func NewAcceptFromRequest(request Request, askingPrice lnwire.MilliSatoshi,
 		Peer:        request.Peer,
 		AssetAmount: request.AssetAmount,
 		acceptMsgData: acceptMsgData{
-			ID:          request.ID,
-			AskingPrice: askingPrice,
-			Expiry:      expiry,
-			sig:         sig,
+			ID:       request.ID,
+			AskPrice: askPrice,
+			Expiry:   expiry,
+			sig:      sig,
 		},
 	}
 }

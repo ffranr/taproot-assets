@@ -89,9 +89,7 @@ func (n *Negotiator) handlePriceOracleAskResponse(request rfqmsg.Request,
 	// If the asking price is nil, then we will return the error message
 	// supplied by the price oracle.
 	if oracleResponse.AskPrice == nil {
-		rejectMsg := rfqmsg.NewRejectMsg(
-			request.Peer, request.ID, *oracleResponse.Err,
-		)
+		rejectMsg := rfqmsg.NewRejectMsg(request, *oracleResponse.Err)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
 		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
@@ -123,7 +121,7 @@ func (n *Negotiator) handlePriceOracleAskResponse(request rfqmsg.Request,
 }
 
 // HandleIncomingQuoteRequest handles an incoming quote request.
-func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
+func (n *Negotiator) HandleIncomingQuoteRequest(request rfqmsg.Request) error {
 	// Ensure that we have a sell offer for the asset that is being
 	// requested.
 
@@ -131,7 +129,7 @@ func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
 	// the negotiation. We will reject the quote request with an error.
 	if n.cfg.PriceOracle == nil {
 		rejectMsg := rfqmsg.NewRejectMsg(
-			req.Peer, req.ID, rfqmsg.ErrPriceOracleUnavailable,
+			request, rfqmsg.ErrPriceOracleUnavailable,
 		)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
@@ -150,14 +148,14 @@ func (n *Negotiator) HandleIncomingQuoteRequest(req rfqmsg.Request) error {
 	go func() {
 		defer n.Wg.Done()
 
-		oracleResp, err := n.queryPriceOracleAskPrice(req)
+		oracleResp, err := n.queryPriceOracleAskPrice(request)
 		if err != nil {
 			err = fmt.Errorf("negotiator failed to query price "+
 				"oracle for ask price: %v", err)
 			n.ErrChan <- err
 		}
 
-		err = n.handlePriceOracleAskResponse(req, oracleResp)
+		err = n.handlePriceOracleAskResponse(request, oracleResp)
 		if err != nil {
 			err = fmt.Errorf("negotiator failed to handle price "+
 				"oracle ask price response: %v", err)

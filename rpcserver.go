@@ -4661,7 +4661,7 @@ func marshalAcceptedQuotes(
 			Id:          quote.ID[:],
 			Scid:        uint64(scid),
 			AssetAmount: quote.AssetAmount,
-			AskPrice:    uint64(quote.AskingPrice),
+			AskPrice:    uint64(quote.AskPrice),
 			Expiry:      quote.Expiry,
 		}
 		rpcQuotes = append(rpcQuotes, rpcQuote)

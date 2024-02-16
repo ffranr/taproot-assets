@@ -41,7 +41,7 @@ func NewChannelRemit(quoteAccept rfqmsg.Accept) (*ChannelRemit, error) {
 	return &ChannelRemit{
 		Scid:                  scid,
 		AssetAmount:           quoteAccept.AssetAmount,
-		MinimumChannelPayment: quoteAccept.AskingPrice,
+		MinimumChannelPayment: quoteAccept.AskPrice,
 		Expiry:                quoteAccept.Expiry,
 	}, nil
 }

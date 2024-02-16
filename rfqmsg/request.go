@@ -130,10 +130,10 @@ func TypeRecordRequestExchangeRateScalingExponent(
 	)
 }
 
-// requestMsgData is a struct that represents the message data from a
-// quote request message.
+// requestMsgData is a struct that represents the message data from a quote
+// request message.
 type requestMsgData struct {
-	// ID is the unique identifier of the request for quote (RFQ).
+	// ID is the unique identifier of the quote request.
 	ID ID
 
 	// AssetID represents the identifier of the asset for which the peer
