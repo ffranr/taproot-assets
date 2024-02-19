@@ -12,6 +12,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lntest"
 	"github.com/lightningnetwork/lnd/lntest/node"
+	"github.com/lightningnetwork/lnd/lntest/wait"
 	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +58,12 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	)
 	require.NoError(t.t, err, "unable to upsert asset sell offer")
 
+	// Subscribe to Carol's RFQ events stream.
+	carolEventNtfns, err := ts.CarolTapd.SubscribeRfqEventNtfns(
+		ctxb, &rfqrpc.SubscribeRfqEventNtfnsRequest{},
+	)
+	require.NoError(t.t, err)
+
 	// Carol sends a buy order to Bob for some amount of the newly minted
 	// asset.
 	purchaseAssetAmt := uint64(200)
@@ -83,8 +90,19 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	)
 	require.NoError(t.t, err, "unable to upsert asset buy order")
 
-	// Wait for the RFQ negotiation to complete.
-	time.Sleep(5 * time.Second)
+	// Wait until Carol receives an incoming quote accept message (sent from
+	// Bob) RFQ event notification.
+	waitErr := wait.NoError(func() error {
+		event, err := carolEventNtfns.Recv()
+		require.NoError(t.t, err)
+
+		if _, ok := event.Event.(*rfqrpc.RfqEvent_IncomingAcceptQuote); ok {
+			return nil
+		}
+
+		return nil
+	}, defaultWaitTimeout)
+	require.NoError(t.t, waitErr)
 
 	// Carol should have received an accepted quote from Bob. This accepted
 	// quote can be used by Carol to make a payment to Bob.

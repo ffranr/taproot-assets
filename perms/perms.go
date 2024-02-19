@@ -216,6 +216,10 @@ var (
 			Entity: "rfq",
 			Action: "read",
 		}},
+		"/rfqrpc.Rfq/SubscribeRfqEventNtfns": {{
+			Entity: "rfq",
+			Action: "write",
+		}},
 		"/tapdevrpc.TapDev/ImportProof": {{
 			Entity: "proofs",
 			Action: "write",

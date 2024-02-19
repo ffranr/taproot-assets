@@ -2314,7 +2314,7 @@ func (r *rpcServer) SubscribeSendAssetEventNtfns(
 		eventSubscriber, false, false,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to register chain porter event"+
+		return fmt.Errorf("failed to register chain porter event "+
 			"notifications subscription: %w", err)
 	}
 
@@ -4745,4 +4745,98 @@ func (r *rpcServer) QueryRfqAcceptedQuotes(_ context.Context,
 	return &rfqrpc.QueryRfqAcceptedQuotesResponse{
 		AcceptedQuotes: rpcQuotes,
 	}, nil
+}
+
+// marshallRfqEvent marshals an RFQ event into the RPC form.
+func marshallRfqEvent(eventInterface fn.Event) (*rfqrpc.RfqEvent, error) {
+	timestamp := eventInterface.Timestamp().UTC().Unix()
+
+	switch event := eventInterface.(type) {
+	case *rfq.IncomingAcceptQuoteEvent:
+		acceptedQuote := &rfqrpc.AcceptedQuote{
+			Peer:        event.Peer.String(),
+			Id:          event.ID[:],
+			Scid:        uint64(event.ShortChannelId()),
+			AssetAmount: event.AssetAmount,
+			AskPrice:    uint64(event.AskPrice),
+			Expiry:      event.Expiry,
+		}
+
+		eventRpc := &rfqrpc.RfqEvent_IncomingAcceptQuote{
+			IncomingAcceptQuote: &rfqrpc.IncomingAcceptQuoteEvent{
+				Timestamp:     uint64(timestamp),
+				AcceptedQuote: acceptedQuote,
+			},
+		}
+		return &rfqrpc.RfqEvent{
+			Event: eventRpc,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("unknown RFQ event type: %T", eventInterface)
+}
+
+// SubscribeRfqEventNtfns subscribes to RFQ event notifications.
+func (r *rpcServer) SubscribeRfqEventNtfns(
+	_ *rfqrpc.SubscribeRfqEventNtfnsRequest,
+	ntfnStream rfqrpc.Rfq_SubscribeRfqEventNtfnsServer) error {
+
+	// Create a new event subscriber and pass a copy to the RFQ manager.
+	// We will then read events from the subscriber.
+	eventSubscriber := fn.NewEventReceiver[fn.Event](fn.DefaultQueueSize)
+	defer eventSubscriber.Stop()
+
+	// Register the subscriber with the ChainPorter.
+	err := r.cfg.RfqManager.RegisterSubscriber(
+		eventSubscriber, false, 0,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to register RFQ manager event "+
+			"notifications subscription: %w", err)
+	}
+
+	for {
+		select {
+		// Handle new events from the subscriber.
+		case event := <-eventSubscriber.NewItemCreated.ChanOut():
+			// Marshal the event into its RPC form.
+			rpcEvent, err := marshallRfqEvent(event)
+			if err != nil {
+				return fmt.Errorf("failed to marshall RFQ "+
+					"event into RPC form: %w", err)
+			}
+
+			err = ntfnStream.Send(rpcEvent)
+			if err != nil {
+				return err
+			}
+
+		// Handle the case where the RPC stream is closed by the client.
+		case <-ntfnStream.Context().Done():
+			// Remove the subscriber from the RFQ manager.
+			err := r.cfg.RfqManager.RemoveSubscriber(
+				eventSubscriber,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to remove RFQ "+
+					"manager event notifications "+
+					"subscription: %w", err)
+			}
+
+			// Don't return an error if a normal context
+			// cancellation has occurred.
+			isCanceledContext := errors.Is(
+				ntfnStream.Context().Err(), context.Canceled,
+			)
+			if isCanceledContext {
+				return nil
+			}
+
+			return ntfnStream.Context().Err()
+
+		// Handle the case where the RPC server is shutting down.
+		case <-r.quit:
+			return nil
+		}
+	}
 }

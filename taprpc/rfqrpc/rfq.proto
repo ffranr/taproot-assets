@@ -23,6 +23,9 @@ service Rfq {
      */
     rpc QueryRfqAcceptedQuotes (QueryRfqAcceptedQuotesRequest)
         returns (QueryRfqAcceptedQuotesResponse);
+
+    rpc SubscribeRfqEventNtfns (SubscribeRfqEventNtfnsRequest)
+        returns (stream RfqEvent);
 }
 
 message AssetSpecifier {
@@ -78,19 +81,20 @@ message QueryRfqAcceptedQuotesRequest {
 }
 
 message AcceptedQuote {
-    // The peer that accepted the quote.
+    // Quote counterparty peer.
     string peer = 1;
 
-    // The unique identifier of the quote accept message.
+    // The unique identifier of the quote request.
     bytes id = 2;
 
     // scid is the short channel ID of the channel over which the payment for
     // the quote should be made.
     uint64 scid = 3;
 
+    // asset_amount is the amount of the subject asset.
     uint64 asset_amount = 4;
 
-    // units: millisats
+    // ask_price is the price in millisats for the entire asset amount.
     uint64 ask_price = 5;
 
     // The unix timestamp after which the quote is no longer valid.
@@ -99,4 +103,23 @@ message AcceptedQuote {
 
 message QueryRfqAcceptedQuotesResponse {
     repeated AcceptedQuote accepted_quotes = 1;
+}
+
+message IncomingAcceptQuoteEvent {
+    // Unix timestamp.
+    uint64 timestamp = 1;
+
+    // The accepted quote.
+    AcceptedQuote accepted_quote = 2;
+}
+
+message SubscribeRfqEventNtfnsRequest {
+}
+
+message RfqEvent {
+    oneof event {
+        // incoming_accept_quote is an event that is sent when an incoming
+        // accept quote message is received.
+        IncomingAcceptQuoteEvent incoming_accept_quote = 1;
+    }
 }

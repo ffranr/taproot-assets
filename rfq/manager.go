@@ -85,6 +85,13 @@ type Manager struct {
 	// peerAcceptedQuotesMtx guards the peerAcceptedQuotes map.
 	peerAcceptedQuotesMtx sync.Mutex
 
+	// subscribers is a map of components that want to be notified on new
+	// events, keyed by their subscription ID.
+	subscribers map[uint64]*fn.EventReceiver[fn.Event]
+
+	// subscriberMtx guards the subscribers map.
+	subscriberMtx sync.Mutex
+
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
 	*fn.ContextGuard
@@ -99,6 +106,10 @@ func NewManager(cfg ManagerCfg) (Manager, error) {
 		outgoingMessages: make(chan rfqmsg.OutgoingMsg),
 
 		peerAcceptedQuotes: make(map[SerialisedScid]rfqmsg.Accept),
+
+		subscribers: make(
+			map[uint64]*fn.EventReceiver[fn.Event],
+		),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -253,6 +264,9 @@ func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 		}
 
 	case *rfqmsg.Accept:
+		// TODO(ffranr): The stream handler should ensure that the
+		//  accept message corresponds to a request.
+		//
 		// The quote request has been accepted. Store accepted quote
 		// so that it can be used to send a payment by our lightning
 		// node.
@@ -261,6 +275,10 @@ func (m *Manager) handleIncomingMessage(incomingMsg rfqmsg.IncomingMsg) error {
 
 		scid := SerialisedScid(msg.ShortChannelId())
 		m.peerAcceptedQuotes[scid] = *msg
+
+		// Notify subscribers of the incoming quote accept.
+		event := NewIncomingAcceptQuoteEvent(msg)
+		m.publishSubscriberEvent(event)
 	}
 
 	return nil
@@ -416,3 +434,80 @@ func (m *Manager) QueryAcceptedQuotes() map[SerialisedScid]rfqmsg.Accept {
 
 	return m.peerAcceptedQuotes
 }
+
+// RegisterSubscriber adds a new subscriber to the set of subscribers that will
+// be notified of any new events that are broadcast.
+//
+// TODO(ffranr): Add support for delivering existing events to new subscribers.
+func (m *Manager) RegisterSubscriber(
+	receiver *fn.EventReceiver[fn.Event],
+	deliverExisting bool, deliverFrom uint64) error {
+
+	m.subscriberMtx.Lock()
+	defer m.subscriberMtx.Unlock()
+
+	m.subscribers[receiver.ID()] = receiver
+
+	return nil
+}
+
+// RemoveSubscriber removes a subscriber from the set of subscribers that will
+// be notified of any new events that are broadcast.
+func (m *Manager) RemoveSubscriber(
+	subscriber *fn.EventReceiver[fn.Event]) error {
+
+	m.subscriberMtx.Lock()
+	defer m.subscriberMtx.Unlock()
+
+	_, ok := m.subscribers[subscriber.ID()]
+	if !ok {
+		return fmt.Errorf("subscriber with ID %d not found",
+			subscriber.ID())
+	}
+
+	subscriber.Stop()
+	delete(m.subscribers, subscriber.ID())
+
+	return nil
+}
+
+// publishSubscriberEvent publishes an event to all subscribers.
+func (m *Manager) publishSubscriberEvent(event fn.Event) {
+	// Lock the subscriber mutex to ensure that we don't modify the
+	// subscriber map while we're iterating over it.
+	m.subscriberMtx.Lock()
+	defer m.subscriberMtx.Unlock()
+
+	// Iterate over the subscribers and deliver the event to each one.
+	for _, sub := range m.subscribers {
+		sub.NewItemCreated.ChanIn() <- event
+	}
+}
+
+// IncomingAcceptQuoteEvent is an event that is broadcast when the RFQ manager
+// receives an accept quote message from a peer.
+type IncomingAcceptQuoteEvent struct {
+	timestamp time.Time
+
+	// Accept is the accepted quote.
+	rfqmsg.Accept
+}
+
+// NewIncomingAcceptQuoteEvent creates a new IncomingAcceptQuoteEvent.
+func NewIncomingAcceptQuoteEvent(
+	accept *rfqmsg.Accept) *IncomingAcceptQuoteEvent {
+
+	return &IncomingAcceptQuoteEvent{
+		timestamp: time.Now().UTC(),
+		Accept:    *accept,
+	}
+}
+
+// Timestamp returns the event creation UTC timestamp.
+func (q *IncomingAcceptQuoteEvent) Timestamp() time.Time {
+	return q.timestamp.UTC()
+}
+
+// Ensure that the IncomingAcceptQuoteEvent struct implements the Event
+// interface.
+var _ fn.Event = (*IncomingAcceptQuoteEvent)(nil)
