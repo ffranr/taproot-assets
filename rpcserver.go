@@ -4771,6 +4771,17 @@ func marshallRfqEvent(eventInterface fn.Event) (*rfqrpc.RfqEvent, error) {
 		return &rfqrpc.RfqEvent{
 			Event: eventRpc,
 		}, nil
+
+	case *rfq.AcceptHtlcEvent:
+		eventRpc := &rfqrpc.RfqEvent_AcceptHtlc{
+			AcceptHtlc: &rfqrpc.AcceptHtlcEvent{
+				Timestamp: uint64(timestamp),
+				Scid:      uint64(event.ChannelRemit.Scid),
+			},
+		}
+		return &rfqrpc.RfqEvent{
+			Event: eventRpc,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("unknown RFQ event type: %T", eventInterface)

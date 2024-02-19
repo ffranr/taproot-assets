@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/asset"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
@@ -77,6 +78,10 @@ type Manager struct {
 	// messages.
 	outgoingMessages chan rfqmsg.OutgoingMsg
 
+	// acceptHtlcEvents is a channel which is populated with accept HTLCs
+	// events.
+	acceptHtlcEvents chan AcceptHtlcEvent
+
 	// peerAcceptedQuotes is a map of serialised short channel IDs (SCIDs)
 	// to associated accepted quotes. These quotes have been accepted by
 	// peer nodes and are therefore available for use in buying assets.
@@ -105,6 +110,7 @@ func NewManager(cfg ManagerCfg) (Manager, error) {
 		incomingMessages: make(chan rfqmsg.IncomingMsg),
 		outgoingMessages: make(chan rfqmsg.OutgoingMsg),
 
+		acceptHtlcEvents:   make(chan AcceptHtlcEvent),
 		peerAcceptedQuotes: make(map[SerialisedScid]rfqmsg.Accept),
 
 		subscribers: make(
@@ -124,8 +130,9 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 
 	// Initialise and start the order handler.
 	m.orderHandler, err = NewOrderHandler(OrderHandlerCfg{
-		CleanupInterval: CacheCleanupInterval,
-		HtlcInterceptor: m.cfg.HtlcInterceptor,
+		CleanupInterval:  CacheCleanupInterval,
+		HtlcInterceptor:  m.cfg.HtlcInterceptor,
+		AcceptHtlcEvents: m.acceptHtlcEvents,
 	})
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ order handler: %w",
@@ -339,6 +346,10 @@ func (m *Manager) mainEventLoop() {
 					err)
 			}
 
+		case acceptHtlcEvent := <-m.acceptHtlcEvents:
+			// Handle a HTLC accept event. Notify any subscribers.
+			m.publishSubscriberEvent(&acceptHtlcEvent)
+
 		// Handle errors from the negotiator.
 		case err := <-m.negotiator.ErrChan:
 			log.Warnf("Negotiator has encountered an error: %v",
@@ -487,6 +498,7 @@ func (m *Manager) publishSubscriberEvent(event fn.Event) {
 // IncomingAcceptQuoteEvent is an event that is broadcast when the RFQ manager
 // receives an accept quote message from a peer.
 type IncomingAcceptQuoteEvent struct {
+	// timestamp is the event creation UTC timestamp.
 	timestamp time.Time
 
 	// Accept is the accepted quote.
@@ -511,3 +523,35 @@ func (q *IncomingAcceptQuoteEvent) Timestamp() time.Time {
 // Ensure that the IncomingAcceptQuoteEvent struct implements the Event
 // interface.
 var _ fn.Event = (*IncomingAcceptQuoteEvent)(nil)
+
+// AcceptHtlcEvent is an event that is sent to the accept HTLCs channel when
+// an HTLC is accepted.
+type AcceptHtlcEvent struct {
+	// Timestamp is the unix timestamp at which the HTLC was accepted.
+	timestamp uint64
+
+	// Htlc is the intercepted HTLC.
+	Htlc lndclient.InterceptedHtlc
+
+	// ChannelRemit is the channel remit that the HTLC complies with.
+	ChannelRemit ChannelRemit
+}
+
+// NewAcceptHtlcEvent creates a new AcceptedHtlcEvent.
+func NewAcceptHtlcEvent(htlc lndclient.InterceptedHtlc,
+	channelRemit ChannelRemit) AcceptHtlcEvent {
+
+	return AcceptHtlcEvent{
+		timestamp:    uint64(time.Now().UTC().Unix()),
+		Htlc:         htlc,
+		ChannelRemit: channelRemit,
+	}
+}
+
+// Timestamp returns the event creation UTC timestamp.
+func (q *AcceptHtlcEvent) Timestamp() time.Time {
+	return time.Unix(int64(q.timestamp), 0).UTC()
+}
+
+// Ensure that the AcceptedHtlcEvent struct implements the Event interface.
+var _ fn.Event = (*AcceptHtlcEvent)(nil)

@@ -3,7 +3,6 @@ package rfq
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync"
 
 	"github.com/lightninglabs/lndclient"
@@ -43,8 +42,6 @@ type StreamHandler struct {
 	// stream handler.
 	cfg StreamHandlerCfg
 
-	randId int
-
 	// recvRawMessages is a channel that receives incoming raw peer
 	// messages.
 	recvRawMessages <-chan lndclient.CustomMessage
@@ -81,14 +78,8 @@ func NewStreamHandler(ctx context.Context, cfg StreamHandlerCfg,
 			"messages via peer message porter: %w", err)
 	}
 
-	minRand := 100
-	maxRand := 1000
-	randId := rand.Intn(maxRand-minRand+1) + minRand
-
 	return &StreamHandler{
 		cfg: cfg,
-
-		randId: randId,
 
 		recvRawMessages:    msgChan,
 		errRecvRawMessages: peerMsgErrChan,
@@ -132,9 +123,10 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 
 	h.seenMessagesMtx.Unlock()
 
-	log.Debugf("(%d) Stream handling incoming message (msg_type=%T, msg_id=%s, "+
-		"origin_peer=%s, self=%s)", h.randId, quoteRequest, quoteRequest.ID.String(),
-		quoteRequest.MsgPeer(), h.cfg.LightningSelfId)
+	log.Debugf("Stream handling incoming message (msg_type=%T, "+
+		"msg_id=%s, origin_peer=%s, self=%s)", quoteRequest,
+		quoteRequest.ID.String(), quoteRequest.MsgPeer(),
+		h.cfg.LightningSelfId)
 
 	// Send the quote request to the RFQ manager.
 	var msg rfqmsg.IncomingMsg = quoteRequest

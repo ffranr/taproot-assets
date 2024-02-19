@@ -105,6 +105,9 @@ message QueryRfqAcceptedQuotesResponse {
     repeated AcceptedQuote accepted_quotes = 1;
 }
 
+message SubscribeRfqEventNtfnsRequest {
+}
+
 message IncomingAcceptQuoteEvent {
     // Unix timestamp.
     uint64 timestamp = 1;
@@ -113,7 +116,13 @@ message IncomingAcceptQuoteEvent {
     AcceptedQuote accepted_quote = 2;
 }
 
-message SubscribeRfqEventNtfnsRequest {
+message AcceptHtlcEvent {
+    // Unix timestamp.
+    uint64 timestamp = 1;
+
+    // scid is the short channel ID of the channel over which the payment for
+    // the quote is made.
+    uint64 scid = 2;
 }
 
 message RfqEvent {
@@ -121,5 +130,9 @@ message RfqEvent {
         // incoming_accept_quote is an event that is sent when an incoming
         // accept quote message is received.
         IncomingAcceptQuoteEvent incoming_accept_quote = 1;
+
+        // accept_htlc is an event that is sent when a HTLC is accepted by the
+        // RFQ service.
+        AcceptHtlcEvent accept_htlc = 2;
     }
 }

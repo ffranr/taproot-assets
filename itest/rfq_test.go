@@ -2,6 +2,8 @@ package itest
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -10,6 +12,7 @@ import (
 	"github.com/lightninglabs/taproot-assets/taprpc/rfqrpc"
 	"github.com/lightningnetwork/lnd/chainreg"
 	"github.com/lightningnetwork/lnd/lnrpc"
+	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
 	"github.com/lightningnetwork/lnd/lntest"
 	"github.com/lightningnetwork/lnd/lntest/node"
 	"github.com/lightningnetwork/lnd/lntest/wait"
@@ -96,9 +99,8 @@ func testRfqHtlcIntercept(t *harnessTest) {
 		event, err := carolEventNtfns.Recv()
 		require.NoError(t.t, err)
 
-		if _, ok := event.Event.(*rfqrpc.RfqEvent_IncomingAcceptQuote); ok {
-			return nil
-		}
+		_, ok := event.Event.(*rfqrpc.RfqEvent_IncomingAcceptQuote)
+		require.True(t.t, ok, "unexpected event: %v", event)
 
 		return nil
 	}, defaultWaitTimeout)
@@ -159,13 +161,53 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	})
 	invoice := ts.CarolLnd.RPC.LookupInvoice(addInvoiceResp.RHash)
 
-	// Alice pays the invoice.
-	t.lndHarness.CompletePaymentRequests(
-		ts.AliceLnd, []string{invoice.PaymentRequest},
+	// Register to receive RFQ events from Bob's tapd node. We'll use this
+	// to wait for Bob to receive the HTLC with the asset transfer specific
+	// scid.
+	bobEventNtfns, err := ts.BobTapd.SubscribeRfqEventNtfns(
+		ctxb, &rfqrpc.SubscribeRfqEventNtfnsRequest{},
 	)
+	require.NoError(t.t, err)
+
+	// Alice pays the invoice.
+	t.Log("Alice paying invoice")
+	req := &routerrpc.SendPaymentRequest{
+		PaymentRequest: invoice.PaymentRequest,
+		TimeoutSeconds: int32(wait.PaymentTimeout.Seconds()),
+		FeeLimitMsat:   math.MaxInt64,
+	}
+	ts.AliceLnd.RPC.SendPayment(req)
+	t.Log("Alice payment sent")
 
 	// At this point Bob should have received a HTLC with the asset transfer
-	// specific scid.
+	// specific scid. We'll wait for Bob to publish an accept HTLC event and
+	// then validate it against the accepted quote.
+	waitErr = wait.NoError(func() error {
+		t.Log("Waiting for Bob to receive HTLC")
+
+		event, err := bobEventNtfns.Recv()
+		require.NoError(t.t, err)
+
+		acceptHtlc, ok := event.Event.(*rfqrpc.RfqEvent_AcceptHtlc)
+		if ok {
+			require.Equal(
+				t.t, acceptedQuote.Scid,
+				acceptHtlc.AcceptHtlc.Scid,
+			)
+			t.Log("Bob has accepted the HTLC")
+			return nil
+		}
+
+		return fmt.Errorf("unexpected event: %v", event)
+	}, defaultWaitTimeout)
+	require.NoError(t.t, waitErr)
+
+	// Close event streams.
+	err = carolEventNtfns.CloseSend()
+	require.NoError(t.t, err)
+
+	err = bobEventNtfns.CloseSend()
+	require.NoError(t.t, err)
 }
 
 // newLndNode creates a new lnd node with the given name and funds its wallet

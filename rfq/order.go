@@ -85,6 +85,9 @@ type OrderHandlerCfg struct {
 	// HtlcInterceptor is the HTLC interceptor. This component is used to
 	// intercept and accept/reject HTLCs.
 	HtlcInterceptor HtlcInterceptor
+
+	// AcceptHtlcEvents is a channel that receives accepted HTLCs.
+	AcceptHtlcEvents chan<- AcceptHtlcEvent
 }
 
 // OrderHandler orchestrates management of accepted quote bundles. It monitors
@@ -157,7 +160,9 @@ func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 		}, nil
 	}
 
-	log.Info("HTLC complies with channel remit. Accepting HTLC")
+	log.Debug("HTLC complies with channel remit.")
+	acceptHtlcEvent := NewAcceptHtlcEvent(htlc, *channelRemit)
+	h.cfg.AcceptHtlcEvents <- acceptHtlcEvent
 
 	return &lndclient.InterceptedHtlcResponse{
 		Action: lndclient.InterceptorActionResume,
