@@ -11,6 +11,12 @@ service Rfq {
     rpc UpsertAssetBuyOrder (UpsertAssetBuyOrderRequest)
         returns (UpsertAssetBuyOrderResponse);
 
+    /* tapcli: `rfq selloffer`
+    UpsertAssetSellOrder is used to upsert a sell offer for a specific asset.
+     */
+    rpc UpsertAssetSellOffer (UpsertAssetSellOfferRequest)
+        returns (UpsertAssetSellOfferResponse);
+
     /* tapcli: `rfq acceptedquotes`
     QueryRfqAcceptedQuotes is used to upsert a sell order for a specific
     asset.
@@ -55,6 +61,17 @@ message UpsertAssetBuyOrderRequest {
 }
 
 message UpsertAssetBuyOrderResponse {
+}
+
+message UpsertAssetSellOfferRequest {
+    // asset_specifier is the subject asset.
+    AssetSpecifier asset_specifier = 1;
+
+    // max_units is the maximum amount of the asset to sell.
+    uint64 max_units = 2;
+}
+
+message UpsertAssetSellOfferResponse {
 }
 
 message QueryRfqAcceptedQuotesRequest {

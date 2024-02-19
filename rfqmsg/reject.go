@@ -108,6 +108,13 @@ var (
 		ErrCode: 1,
 		ErrMsg:  "price oracle service unavailable",
 	}
+
+	// ErrNoSuitableSellOffer is the error code for when there is no
+	// suitable sell offer available.
+	ErrNoSuitableSellOffer = RejectErr{
+		ErrCode: 2,
+		ErrMsg:  "no suitable sell offer available",
+	}
 )
 
 // rejectMsgData is a struct that represents the data field of a quote

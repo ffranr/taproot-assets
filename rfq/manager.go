@@ -335,7 +335,7 @@ func (m *Manager) mainEventLoop() {
 }
 
 // UpsertAssetSellOffer upserts an asset sell offer with the RFQ manager.
-func (m *Manager) UpsertAssetSellOffer(offer AssetSellOffer) error {
+func (m *Manager) UpsertAssetSellOffer(offer SellOffer) error {
 	// Store the asset sell offer in the negotiator.
 	err := m.negotiator.UpsertAssetSellOffer(offer)
 	if err != nil {

@@ -208,6 +208,10 @@ var (
 			Entity: "rfq",
 			Action: "write",
 		}},
+		"/rfqrpc.Rfq/UpsertAssetSellOffer": {{
+			Entity: "rfq",
+			Action: "write",
+		}},
 		"/rfqrpc.Rfq/QueryRfqAcceptedQuotes": {{
 			Entity: "rfq",
 			Action: "read",

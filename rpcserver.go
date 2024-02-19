@@ -4517,6 +4517,36 @@ func (r *rpcServer) RemoveUTXOLease(ctx context.Context,
 	return &wrpc.RemoveUTXOLeaseResponse{}, nil
 }
 
+// MarshalAssetFedSyncCfg returns an RPC ready asset specific federation sync
+// config.
+func MarshalAssetFedSyncCfg(
+	config universe.FedUniSyncConfig) (*unirpc.AssetFederationSyncConfig,
+	error) {
+
+	// Marshal universe ID into the RPC form.
+	uniID := config.UniverseID
+	assetIDBytes := uniID.AssetID[:]
+
+	var groupKeyBytes []byte
+	if uniID.GroupKey != nil {
+		groupKeyBytes = uniID.GroupKey.SerializeCompressed()
+	}
+	uniIdRPC := unirpc.MarshalUniverseID(assetIDBytes, groupKeyBytes)
+
+	// Marshal proof type.
+	proofTypeRpc, err := MarshalUniProofType(uniID.ProofType)
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal proof type: %w", err)
+	}
+	uniIdRPC.ProofType = proofTypeRpc
+
+	return &unirpc.AssetFederationSyncConfig{
+		Id:              uniIdRPC,
+		AllowSyncInsert: config.AllowSyncInsert,
+		AllowSyncExport: config.AllowSyncExport,
+	}, nil
+}
+
 // unmarshalAssetSpecifier unmarshals an asset specifier from the RPC form.
 func unmarshalAssetSpecifier(req *rfqrpc.AssetSpecifier) (*asset.ID,
 	*btcec.PublicKey, error) {
@@ -4649,6 +4679,38 @@ func (r *rpcServer) UpsertAssetBuyOrder(_ context.Context,
 	return &rfqrpc.UpsertAssetBuyOrderResponse{}, nil
 }
 
+func (r *rpcServer) UpsertAssetSellOffer(_ context.Context,
+	req *rfqrpc.UpsertAssetSellOfferRequest) (*rfqrpc.UpsertAssetSellOfferResponse,
+	error) {
+
+	// Unmarshal the sell offer from the RPC form.
+	assetID, assetGroupKey, err := unmarshalAssetSpecifier(
+		req.AssetSpecifier,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling asset specifier: "+
+			"%w", err)
+	}
+
+	sellOffer := &rfq.SellOffer{
+		AssetID:       assetID,
+		AssetGroupKey: assetGroupKey,
+		MaxUnits:      req.MaxUnits,
+	}
+
+	rpcsLog.Debugf("[UpsertAssetSellOffer]: upserting sell offer "+
+		"(sell_offer=%v)", sellOffer)
+
+	// Upsert the sell offer into the RFQ manager.
+	err = r.cfg.RfqManager.UpsertAssetSellOffer(*sellOffer)
+	if err != nil {
+		return nil, fmt.Errorf("error upserting sell offer into RFQ "+
+			"manager: %w", err)
+	}
+
+	return &rfqrpc.UpsertAssetSellOfferResponse{}, nil
+}
+
 // marshalAcceptedQuotes marshals a map of accepted quotes into the RPC form.
 func marshalAcceptedQuotes(
 	acceptedQuotes map[rfq.SerialisedScid]rfqmsg.Accept) []*rfqrpc.AcceptedQuote {
@@ -4682,35 +4744,5 @@ func (r *rpcServer) QueryRfqAcceptedQuotes(_ context.Context,
 
 	return &rfqrpc.QueryRfqAcceptedQuotesResponse{
 		AcceptedQuotes: rpcQuotes,
-	}, nil
-}
-
-// MarshalAssetFedSyncCfg returns an RPC ready asset specific federation sync
-// config.
-func MarshalAssetFedSyncCfg(
-	config universe.FedUniSyncConfig) (*unirpc.AssetFederationSyncConfig,
-	error) {
-
-	// Marshal universe ID into the RPC form.
-	uniID := config.UniverseID
-	assetIDBytes := uniID.AssetID[:]
-
-	var groupKeyBytes []byte
-	if uniID.GroupKey != nil {
-		groupKeyBytes = uniID.GroupKey.SerializeCompressed()
-	}
-	uniIdRPC := unirpc.MarshalUniverseID(assetIDBytes, groupKeyBytes)
-
-	// Marshal proof type.
-	proofTypeRpc, err := MarshalUniProofType(uniID.ProofType)
-	if err != nil {
-		return nil, fmt.Errorf("unable to marshal proof type: %w", err)
-	}
-	uniIdRPC.ProofType = proofTypeRpc
-
-	return &unirpc.AssetFederationSyncConfig{
-		Id:              uniIdRPC,
-		AllowSyncInsert: config.AllowSyncInsert,
-		AllowSyncExport: config.AllowSyncExport,
 	}, nil
 }

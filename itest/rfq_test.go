@@ -39,17 +39,31 @@ func testRfqHtlcIntercept(t *harnessTest) {
 	)
 	mintedAssetId := rpcAssets[0].AssetGenesis.AssetId
 
-	// Carol sends a buy order to Bob for some amount of the newly minted
-	// asset.
 	ctxb := context.Background()
 	ctxt, cancel := context.WithTimeout(ctxb, defaultWaitTimeout)
 	defer cancel()
 
+	// Upsert an asset sell offer to Bob's tapd node. This will allow Bob to
+	// sell the newly minted asset to Carol.
+	_, err := ts.BobTapd.UpsertAssetSellOffer(
+		ctxt, &rfqrpc.UpsertAssetSellOfferRequest{
+			AssetSpecifier: &rfqrpc.AssetSpecifier{
+				Id: &rfqrpc.AssetSpecifier_AssetId{
+					AssetId: mintedAssetId,
+				},
+			},
+			MaxUnits: 1000,
+		},
+	)
+	require.NoError(t.t, err, "unable to upsert asset sell offer")
+
+	// Carol sends a buy order to Bob for some amount of the newly minted
+	// asset.
 	purchaseAssetAmt := uint64(200)
 	bidAmt := uint64(42000)
 	buyOrderExpiry := uint64(time.Now().Add(24 * time.Hour).Unix())
 
-	_, err := ts.CarolTapd.UpsertAssetBuyOrder(
+	_, err = ts.CarolTapd.UpsertAssetBuyOrder(
 		ctxt, &rfqrpc.UpsertAssetBuyOrderRequest{
 			AssetSpecifier: &rfqrpc.AssetSpecifier{
 				Id: &rfqrpc.AssetSpecifier_AssetId{
