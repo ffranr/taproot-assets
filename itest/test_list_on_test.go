@@ -219,6 +219,12 @@ var testCases = []*testCase{
 		name: "mint proof repeat fed sync attempt",
 		test: testMintProofRepeatFedSyncAttempt,
 	},
+
+	// Request for quote (RFQ) tests.
+	{
+		name: "rfq htlc intercept",
+		test: testRfqHtlcIntercept,
+	},
 }
 
 var optionalTestCases = []*testCase{

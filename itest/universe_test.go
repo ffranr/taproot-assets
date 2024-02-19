@@ -518,7 +518,7 @@ func testUniverseFederation(t *harnessTest) {
 	firstAsset := MintAssetsConfirmBatch(t.t, miner, t.tapd, simpleAssets[:1])
 	require.Len(t.t, firstAsset, 1)
 
-	// Make sure we can't add ourselves to the universe.
+	// Make sure we can'testHarness add ourselves to the universe.
 	_, err := t.tapd.AddFederationServer(
 		ctxt, &unirpc.AddFederationServerRequest{
 			Servers: []*unirpc.UniverseFederationServer{{
@@ -528,7 +528,7 @@ func testUniverseFederation(t *harnessTest) {
 	)
 	require.ErrorContains(t.t, err, "cannot add ourselves")
 
-	// Make sure we can't add an invalid server to the universe.
+	// Make sure we can'testHarness add an invalid server to the universe.
 	_, err = t.tapd.AddFederationServer(
 		ctxt, &unirpc.AddFederationServerRequest{
 			Servers: []*unirpc.UniverseFederationServer{{

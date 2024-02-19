@@ -403,6 +403,12 @@ func (m *MockChainBridge) EstimateFee(ctx context.Context,
 	return 253, nil
 }
 
+func (m *MockChainBridge) GetInfo(
+	_ context.Context) (*lndclient.Info, error) {
+
+	return &lndclient.Info{}, nil
+}
+
 func GenMockGroupVerifier() func(*btcec.PublicKey) error {
 	return func(groupKey *btcec.PublicKey) error {
 		return nil

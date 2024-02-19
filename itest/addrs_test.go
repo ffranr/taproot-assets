@@ -48,7 +48,7 @@ func testAddresses(t *harnessTest) {
 
 	var addresses []*taprpc.Addr
 	for idx, a := range rpcAssets {
-		// In order to force a split, we don't try to send the full
+		// In order to force a split, we don'testHarness try to send the full
 		// asset.
 		addr, err := secondTapd.NewAddr(ctxt, &taprpc.NewAddrRequest{
 			AssetId:      a.AssetGenesis.AssetId,
@@ -242,7 +242,7 @@ func testAddressAssetSyncer(t *harnessTest) {
 	})
 	require.ErrorContains(t.t, err, "asset lookup failed for asset")
 
-	// Turn off global universe syncing for Bob, so he doesn't observe any
+	// Turn off global universe syncing for Bob, so he doesn'testHarness observe any
 	// future assets minted by Alice.
 	globalConfigs := []*unirpc.GlobalFederationSyncConfig{
 		{
@@ -427,7 +427,7 @@ func runMultiSendTest(ctxt context.Context, t *harnessTest, alice,
 	bob *tapdHarness, genInfo *taprpc.GenesisInfo,
 	mintedAsset *taprpc.Asset, runIdx, numRuns int) {
 
-	// In order to force a split, we don't try to send the full asset.
+	// In order to force a split, we don'testHarness try to send the full asset.
 	const sendAmt = 100
 	bobAddr1, err := bob.NewAddr(ctxt, &taprpc.NewAddrRequest{
 		AssetId: genInfo.AssetId,

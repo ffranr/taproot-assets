@@ -337,7 +337,7 @@ func testMultiAssetGroupSend(t *harnessTest) {
 		)
 		genInfo := sendAsset.AssetGenesis
 		t.Logf("Attempt %d: Sending %d asset(s) with ID %x from "+
-			"alice to bob", i+1, numUnits, genInfo.AssetId)
+			"AliceLnd to BobLnd", i+1, numUnits, genInfo.AssetId)
 
 		addr, err := secondTapd.NewAddr(ctxt, &taprpc.NewAddrRequest{
 			AssetId: genInfo.AssetId,

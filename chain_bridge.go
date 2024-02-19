@@ -200,6 +200,44 @@ func (l *LndRpcChainBridge) EstimateFee(ctx context.Context,
 	return l.lnd.WalletKit.EstimateFeeRate(ctx, int32(confTarget))
 }
 
+// SubscribeCustomMessages creates a subscription to custom messages received
+// from our peers.
+//
+// TODO(ffranr): This should be moved into its own interface because it's not
+// related to the chain.
+func (l *LndRpcChainBridge) SubscribeCustomMessages(
+	ctx context.Context) (<-chan lndclient.CustomMessage,
+	<-chan error, error) {
+
+	return l.lnd.Client.SubscribeCustomMessages(ctx)
+}
+
+// SendCustomMessage sends a custom message to a peer.
+//
+// TODO(ffranr): This should be moved into its own interface because it's not
+// related to the chain.
+func (l *LndRpcChainBridge) SendCustomMessage(ctx context.Context,
+	msg lndclient.CustomMessage) error {
+
+	return l.lnd.Client.SendCustomMessage(ctx, msg)
+}
+
+// InterceptHtlcs intercepts all incoming HTLCs and calls the given handler
+// function with the HTLC details. The handler function can then decide whether
+// to accept or reject the HTLC.
+func (l *LndRpcChainBridge) InterceptHtlcs(
+	ctx context.Context, handler lndclient.HtlcInterceptHandler) error {
+
+	return l.lnd.Router.InterceptHtlcs(ctx, handler)
+}
+
+// GetInfo returns the current information concerning the state of the lnd node.
+func (l *LndRpcChainBridge) GetInfo(
+	ctx context.Context) (*lndclient.Info, error) {
+
+	return l.lnd.Client.GetInfo(ctx)
+}
+
 // A compile time assertion to ensure LndRpcChainBridge meets the
 // tapgarden.ChainBridge interface.
 var _ tapgarden.ChainBridge = (*LndRpcChainBridge)(nil)

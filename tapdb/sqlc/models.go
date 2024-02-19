@@ -98,6 +98,12 @@ type AssetSeedling struct {
 	GroupAnchorID   sql.NullInt64
 }
 
+type AssetSellOffer struct {
+	TxnID     int64
+	AssetID   sql.NullInt64
+	MaxAmount int64
+}
+
 type AssetTransfer struct {
 	ID               int64
 	HeightHint       int32

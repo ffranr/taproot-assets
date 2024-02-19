@@ -278,6 +278,9 @@ type ChainBridge interface {
 	// EstimateFee returns a fee estimate for the confirmation target.
 	EstimateFee(ctx context.Context,
 		confTarget uint32) (chainfee.SatPerKWeight, error)
+
+	// GetInfo returns the current information about the chain backend.
+	GetInfo(ctx context.Context) (*lndclient.Info, error)
 }
 
 // FundedPsbt represents a fully funded PSBT transaction.

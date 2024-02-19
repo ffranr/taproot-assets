@@ -343,7 +343,7 @@ func testBurnGroupedAssets(t *harnessTest) {
 	)
 	require.Len(t.t, secondMintResponses, 1)
 
-	// Ensure that we haven't created a new group.
+	// Ensure that we haven'testHarness created a new group.
 	AssertNumGroups(t.t, t.tapd, 1)
 
 	secondMintResp := secondMintResponses[0]
