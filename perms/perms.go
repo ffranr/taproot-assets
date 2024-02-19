@@ -212,6 +212,22 @@ var (
 			Entity: "universe",
 			Action: "read",
 		}},
+		"/rfqrpc.Rfq/UpsertAssetBuyOrder": {{
+			Entity: "rfq",
+			Action: "write",
+		}},
+		"/rfqrpc.Rfq/UpsertAssetSellOffer": {{
+			Entity: "rfq",
+			Action: "write",
+		}},
+		"/rfqrpc.Rfq/QueryRfqAcceptedQuotes": {{
+			Entity: "rfq",
+			Action: "read",
+		}},
+		"/rfqrpc.Rfq/SubscribeRfqEventNtfns": {{
+			Entity: "rfq",
+			Action: "write",
+		}},
 		"/tapdevrpc.TapDev/ImportProof": {{
 			Entity: "proofs",
 			Action: "write",
