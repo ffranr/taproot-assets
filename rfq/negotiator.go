@@ -32,10 +32,12 @@ type Negotiator struct {
 	// messages.
 	outgoingMessages chan<- rfqmsg.OutgoingMsg
 
-	// assetSellOffers is a map (keyed on asset) that holds the asset sell
-	// offers that the negotiator has received.
+	// assetSellOffers is a map (keyed on asset ID) that holds asset sell
+	// offers.
 	assetSellOffers map[string]AssetSellOffer
 
+	// assetGroupSellOffers is a map (keyed on asset group key) that holds
+	// asset sell offers.
 	assetGroupSellOffers map[string]AssetSellOffer
 
 	// ErrChan is a channel that is used to communicate goroutine errors
@@ -60,6 +62,89 @@ func NewNegotiator(cfg NegotiatorCfg,
 			Quit:           make(chan struct{}),
 		},
 	}, nil
+}
+
+// queryBidFromPriceOracle queries the price oracle for a bid price. It
+// returns an appropriate outgoing response message which should be sent to the
+// peer.
+func (n *Negotiator) queryBidFromPriceOracle(peer route.Vertex,
+	assetId *asset.ID, assetGroupKey *btcec.PublicKey,
+	assetAmount uint64) (rfqmsg.OutgoingMsg, error) {
+
+	ctx, cancel := n.WithCtxQuitNoTimeout()
+	defer cancel()
+
+	oracleResponse, err := n.cfg.PriceOracle.QueryBidPrice(
+		ctx, assetId, assetGroupKey, assetAmount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query price oracle for "+
+			"bid: %w", err)
+	}
+
+	// If the bid price is nil, then we will return the error message
+	// supplied by the price oracle.
+	if oracleResponse.BidPrice == nil {
+		return nil, fmt.Errorf("price oracle returned error: %v",
+			*oracleResponse.Err)
+	}
+
+	// TODO(ffranr): Ensure that the expiryDelay time is valid and
+	//  sufficient.
+
+	requestMsg, err := rfqmsg.NewRequest(
+		peer, assetId, assetGroupKey, assetAmount,
+		*oracleResponse.BidPrice,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create quote request "+
+			"message: %w", err)
+	}
+
+	return &requestMsg, nil
+}
+
+// RequestQuote requests a bid quote (buying an asset) from a peer.
+func (n *Negotiator) RequestQuote(buyOrder BuyOrder) error {
+	// If there is no price oracle available, then we cannot proceed with
+	// the negotiation. We will reject the quote request with an error.
+	if n.cfg.PriceOracle == nil {
+		return fmt.Errorf("price oracle is unavailable")
+	}
+
+	// Query the price oracle for a reasonable bid price. We perform this
+	// query and response handling in a separate goroutine in case it is a
+	// remote service and takes a long time to respond.
+	n.Wg.Add(1)
+	go func() {
+		defer n.Wg.Done()
+
+		// Query the price oracle for a bid price.
+		outgoingMsg, err := n.queryBidFromPriceOracle(
+			*buyOrder.Peer, buyOrder.AssetID,
+			buyOrder.AssetGroupKey, buyOrder.MinAssetAmount,
+		)
+		if err != nil {
+			err := fmt.Errorf("negotiator failed to handle price "+
+				"oracle response: %w", err)
+			n.ErrChan <- err
+			return
+		}
+
+		// Send the response message to the outgoing messages channel.
+		sendSuccess := fn.SendOrQuit(
+			n.outgoingMessages, outgoingMsg, n.Quit,
+		)
+		if !sendSuccess {
+			err := fmt.Errorf("negotiator failed to add quote " +
+				"request message to the outgoing messages " +
+				"channel")
+			n.ErrChan <- err
+			return
+		}
+	}()
+
+	return nil
 }
 
 // queryAskFromPriceOracle queries the price oracle for an asking price. It
