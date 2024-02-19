@@ -8,7 +8,6 @@ import (
 	"github.com/lightninglabs/lndclient"
 	"github.com/lightninglabs/taproot-assets/fn"
 	"github.com/lightninglabs/taproot-assets/rfqmsg"
-	"github.com/lightningnetwork/lnd/routing/route"
 )
 
 // StreamHandlerCfg is a struct that holds the configuration parameters for the
@@ -19,13 +18,10 @@ type StreamHandlerCfg struct {
 	// peer messages.
 	PeerMessagePorter PeerMessagePorter
 
-	// LightningSelfId is the public key of the lightning node that the RFQ
-	// manager is associated with.
-	//
-	// TODO(ffranr): The tapd node was receiving wire messages that it sent.
-	//  This is a temporary fix to prevent the node from processing its own
-	//  messages.
-	LightningSelfId route.Vertex
+	// IncomingMessages is a channel which is populated with incoming
+	// (received) RFQ messages. These messages have been extracted from the
+	// raw peer wire messages by the stream handler service.
+	IncomingMessages chan<- rfqmsg.IncomingMsg
 }
 
 // StreamHandler is a struct that handles incoming and outgoing peer RFQ stream
@@ -50,15 +46,6 @@ type StreamHandler struct {
 	// the peer raw messages subscription.
 	errRecvRawMessages <-chan error
 
-	// incomingMessages is a channel which is populated with incoming
-	// (received) RFQ messages. These messages have been extracted from the
-	// raw peer wire messages by the stream handler service.
-	incomingMessages chan<- rfqmsg.IncomingMsg
-
-	seenMessages map[string]struct{}
-
-	seenMessagesMtx sync.Mutex
-
 	// ContextGuard provides a wait group and main quit channel that can be
 	// used to create guarded contexts.
 	*fn.ContextGuard
@@ -68,8 +55,8 @@ type StreamHandler struct {
 //
 // TODO(ffranr): Pass in a signer so that we can create a signature over output
 // message fields.
-func NewStreamHandler(ctx context.Context, cfg StreamHandlerCfg,
-	incomingMessages chan<- rfqmsg.IncomingMsg) (*StreamHandler, error) {
+func NewStreamHandler(ctx context.Context,
+	cfg StreamHandlerCfg) (*StreamHandler, error) {
 
 	pPorter := cfg.PeerMessagePorter
 	msgChan, peerMsgErrChan, err := pPorter.SubscribeCustomMessages(ctx)
@@ -83,10 +70,6 @@ func NewStreamHandler(ctx context.Context, cfg StreamHandlerCfg,
 
 		recvRawMessages:    msgChan,
 		errRecvRawMessages: peerMsgErrChan,
-
-		incomingMessages: incomingMessages,
-
-		seenMessages: make(map[string]struct{}),
 
 		ContextGuard: &fn.ContextGuard{
 			DefaultTimeout: DefaultTimeout,
@@ -105,32 +88,13 @@ func (h *StreamHandler) handleIncomingQuoteRequest(
 			"from a wire message: %w", err)
 	}
 
-	if quoteRequest.Peer == h.cfg.LightningSelfId {
-		return nil
-	}
-
-	// If we have already seen this message, we will ignore it.
-	//
-	// TODO(ffranr): Why do messages get sent twice?
-	h.seenMessagesMtx.Lock()
-
-	if _, ok := h.seenMessages[quoteRequest.ID.String()]; ok {
-		return nil
-	}
-
-	// Mark the message as seen.
-	h.seenMessages[quoteRequest.ID.String()] = struct{}{}
-
-	h.seenMessagesMtx.Unlock()
-
 	log.Debugf("Stream handling incoming message (msg_type=%T, "+
-		"msg_id=%s, origin_peer=%s, self=%s)", quoteRequest,
-		quoteRequest.ID.String(), quoteRequest.MsgPeer(),
-		h.cfg.LightningSelfId)
+		"msg_id=%s, origin_peer=%s)", quoteRequest,
+		quoteRequest.ID.String(), quoteRequest.MsgPeer())
 
 	// Send the quote request to the RFQ manager.
 	var msg rfqmsg.IncomingMsg = quoteRequest
-	sendSuccess := fn.SendOrQuit(h.incomingMessages, msg, h.Quit)
+	sendSuccess := fn.SendOrQuit(h.cfg.IncomingMessages, msg, h.Quit)
 	if !sendSuccess {
 		return fmt.Errorf("RFQ stream handler shutting down")
 	}
@@ -157,7 +121,7 @@ func (h *StreamHandler) handleIncomingQuoteAccept(
 
 	// Send the message to the RFQ manager.
 	var msg rfqmsg.IncomingMsg = quoteAccept
-	sendSuccess := fn.SendOrQuit(h.incomingMessages, msg, h.Quit)
+	sendSuccess := fn.SendOrQuit(h.cfg.IncomingMessages, msg, h.Quit)
 	if !sendSuccess {
 		return fmt.Errorf("RFQ stream handler shutting down")
 	}
@@ -184,7 +148,7 @@ func (h *StreamHandler) handleIncomingQuoteReject(
 
 	// Send the message to the RFQ manager.
 	var msg rfqmsg.IncomingMsg = quoteReject
-	sendSuccess := fn.SendOrQuit(h.incomingMessages, msg, h.Quit)
+	sendSuccess := fn.SendOrQuit(h.cfg.IncomingMessages, msg, h.Quit)
 	if !sendSuccess {
 		return fmt.Errorf("RFQ stream handler shutting down")
 	}

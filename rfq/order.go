@@ -126,7 +126,8 @@ func NewOrderHandler(cfg OrderHandlerCfg) (*OrderHandler, error) {
 
 // handleIncomingHtlc handles an incoming HTLC.
 //
-// NOTE: This function must be thread safe.
+// NOTE: This function must be thread safe. It is used by an external
+// interceptor service.
 func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 	htlc lndclient.InterceptedHtlc) (*lndclient.InterceptedHtlcResponse,
 	error) {
@@ -160,7 +161,8 @@ func (h *OrderHandler) handleIncomingHtlc(_ context.Context,
 		}, nil
 	}
 
-	log.Debug("HTLC complies with channel remit.")
+	log.Debug("HTLC complies with channel remit. Broadcasting accept " +
+		"event.")
 	acceptHtlcEvent := NewAcceptHtlcEvent(htlc, *channelRemit)
 	h.cfg.AcceptHtlcEvents <- acceptHtlcEvent
 

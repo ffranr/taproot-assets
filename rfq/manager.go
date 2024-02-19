@@ -39,14 +39,6 @@ type ManagerCfg struct {
 	// PriceOracle is the price oracle that the RFQ manager will use to
 	// determine whether a quote is accepted or rejected.
 	PriceOracle PriceOracle
-
-	// LightningSelfId is the public key of the lightning node that the RFQ
-	// manager is associated with.
-	//
-	// TODO(ffranr): The tapd node was receiving wire messages that it sent.
-	//  This is a temporary fix to prevent the node from processing its own
-	//  messages.
-	LightningSelfId route.Vertex
 }
 
 // Manager is a struct that manages the request for quote (RFQ) system.
@@ -144,12 +136,11 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	}
 
 	// Initialise and start the peer message stream handler.
-	streamHandlerCfg := StreamHandlerCfg{
-		PeerMessagePorter: m.cfg.PeerMessagePorter,
-		LightningSelfId:   m.cfg.LightningSelfId,
-	}
 	m.streamHandler, err = NewStreamHandler(
-		ctx, streamHandlerCfg, m.incomingMessages,
+		ctx, StreamHandlerCfg{
+			PeerMessagePorter: m.cfg.PeerMessagePorter,
+			IncomingMessages:  m.incomingMessages,
+		},
 	)
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ subsystem service: "+
@@ -162,10 +153,12 @@ func (m *Manager) startSubsystems(ctx context.Context) error {
 	}
 
 	// Initialise and start the quote negotiator.
-	negotiatorCfg := NegotiatorCfg{
-		PriceOracle: m.cfg.PriceOracle,
-	}
-	m.negotiator, err = NewNegotiator(negotiatorCfg, m.outgoingMessages)
+	m.negotiator, err = NewNegotiator(
+		NegotiatorCfg{
+			PriceOracle:      m.cfg.PriceOracle,
+			OutgoingMessages: m.outgoingMessages,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("error initializing RFQ negotiator: %w",
 			err)
@@ -324,8 +317,8 @@ func (m *Manager) mainEventLoop() {
 		case incomingMsg := <-m.incomingMessages:
 			peer := incomingMsg.MsgPeer()
 			log.Debugf("Manager handling incoming message "+
-				"(msg_type=%T, origin_peer=%s)",
-				incomingMsg, peer)
+				"(msg_type=%T, origin_peer=%s)", incomingMsg,
+				peer)
 
 			err := m.handleIncomingMessage(incomingMsg)
 			if err != nil {
@@ -337,8 +330,8 @@ func (m *Manager) mainEventLoop() {
 		case outgoingMsg := <-m.outgoingMessages:
 			peer := outgoingMsg.MsgPeer()
 			log.Debugf("Manager handling outgoing message "+
-				"(msg_type=%T, dest_peer=%s)",
-				outgoingMsg, peer.String())
+				"(msg_type=%T, dest_peer=%s)", outgoingMsg,
+				peer.String())
 
 			err := m.handleOutgoingMessage(outgoingMsg)
 			if err != nil {

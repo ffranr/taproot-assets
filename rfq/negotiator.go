@@ -17,6 +17,10 @@ type NegotiatorCfg struct {
 	// PriceOracle is the price oracle that the negotiator will use to
 	// determine whether a quote is accepted or rejected.
 	PriceOracle PriceOracle
+
+	// OutgoingMessages is a channel which is populated with outgoing peer
+	// messages.
+	OutgoingMessages chan<- rfqmsg.OutgoingMsg
 }
 
 // Negotiator is a struct that handles the negotiation of quotes. It is a RFQ
@@ -27,10 +31,6 @@ type Negotiator struct {
 
 	// cfg holds the configuration parameters for the negotiator.
 	cfg NegotiatorCfg
-
-	// outgoingMessages is a channel which is populated with outgoing peer
-	// messages.
-	outgoingMessages chan<- rfqmsg.OutgoingMsg
 
 	// assetSellOffers is a map (keyed on asset ID) that holds asset sell
 	// offers.
@@ -50,13 +50,10 @@ type Negotiator struct {
 }
 
 // NewNegotiator creates a new quote negotiator.
-func NewNegotiator(cfg NegotiatorCfg,
-	outgoingMessages chan<- rfqmsg.OutgoingMsg) (*Negotiator, error) {
-
+func NewNegotiator(cfg NegotiatorCfg) (*Negotiator, error) {
 	return &Negotiator{
 		cfg: cfg,
 
-		outgoingMessages:     outgoingMessages,
 		assetSellOffers:      make(map[string]SellOffer),
 		assetGroupSellOffers: make(map[string]SellOffer),
 
@@ -68,9 +65,8 @@ func NewNegotiator(cfg NegotiatorCfg,
 	}, nil
 }
 
-// queryBidFromPriceOracle queries the price oracle for a bid price. It
-// returns an appropriate outgoing response message which should be sent to the
-// peer.
+// queryBidFromPriceOracle queries the price oracle for a bid price. It returns
+// an appropriate outgoing response message which should be sent to the peer.
 func (n *Negotiator) queryBidFromPriceOracle(peer route.Vertex,
 	assetId *asset.ID, assetGroupKey *btcec.PublicKey,
 	assetAmount uint64) (rfqmsg.OutgoingMsg, error) {
@@ -137,7 +133,7 @@ func (n *Negotiator) RequestQuote(buyOrder BuyOrder) error {
 
 		// Send the response message to the outgoing messages channel.
 		sendSuccess := fn.SendOrQuit(
-			n.outgoingMessages, outgoingMsg, n.Quit,
+			n.cfg.OutgoingMessages, outgoingMsg, n.Quit,
 		)
 		if !sendSuccess {
 			err := fmt.Errorf("negotiator failed to add quote " +
@@ -205,7 +201,9 @@ func (n *Negotiator) HandleIncomingQuoteRequest(request rfqmsg.Request) error {
 		)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
-		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
+		sendSuccess := fn.SendOrQuit(
+			n.cfg.OutgoingMessages, msg, n.Quit,
+		)
 		if !sendSuccess {
 			return fmt.Errorf("negotiator failed to send reject " +
 				"message")
@@ -222,7 +220,9 @@ func (n *Negotiator) HandleIncomingQuoteRequest(request rfqmsg.Request) error {
 		)
 		var msg rfqmsg.OutgoingMsg = &rejectMsg
 
-		sendSuccess := fn.SendOrQuit(n.outgoingMessages, msg, n.Quit)
+		sendSuccess := fn.SendOrQuit(
+			n.cfg.OutgoingMessages, msg, n.Quit,
+		)
 		if !sendSuccess {
 			return fmt.Errorf("negotiator failed to send reject " +
 				"message")
@@ -248,7 +248,7 @@ func (n *Negotiator) HandleIncomingQuoteRequest(request rfqmsg.Request) error {
 
 		// Send the response message to the outgoing messages channel.
 		sendSuccess := fn.SendOrQuit(
-			n.outgoingMessages, outgoingMsgResponse, n.Quit,
+			n.cfg.OutgoingMessages, outgoingMsgResponse, n.Quit,
 		)
 		if !sendSuccess {
 			err = fmt.Errorf("negotiator failed to add message "+
