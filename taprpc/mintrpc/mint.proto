@@ -201,6 +201,14 @@ message MintAsset {
     compatible with assets that have a JSON MetaData field.
     */
     uint32 decimal_display = 13;
+
+    // Set to true to enable universe commitments for the asset(s) mint event.
+    // This option restricts the minting batch to assets that are part of the
+    // same universe (i.e., share the same group key).
+    //
+    // Universe commitments are minter-controlled, on-chain anchored
+    // attestations regarding the state of the universe.
+    bool enable_uni_commitment = 14;
 }
 
 message MintAssetRequest {

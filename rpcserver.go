@@ -485,6 +485,19 @@ func validateMintAssetRequest(req *mintrpc.MintAssetRequest) error {
 			"metadata")
 	}
 
+	// Ensure that the universe commitment flag is used correctly.
+	if req.Asset.EnableUniCommitment {
+		// If universe commitment is enabled, the asset must be a new
+		// grouped asset.
+		if !(specificGroupKey || specificGroupAnchor) {
+			return fmt.Errorf("universe announcement feature is "+
+				"only applicable for grouped assets ("+
+				"specific_group_key=%v,"+
+				"specific_group_anchor=%v)",
+				specificGroupKey, specificGroupAnchor)
+		}
+	}
+
 	return nil
 }
 
@@ -592,12 +605,13 @@ func (r *rpcServer) MintAsset(ctx context.Context,
 	}
 
 	seedling := &tapgarden.Seedling{
-		AssetVersion:   assetVersion,
-		AssetType:      asset.Type(req.Asset.AssetType),
-		AssetName:      req.Asset.Name,
-		Amount:         req.Asset.Amount,
-		EnableEmission: req.Asset.NewGroupedAsset,
-		Meta:           seedlingMeta,
+		AssetVersion:        assetVersion,
+		AssetType:           asset.Type(req.Asset.AssetType),
+		AssetName:           req.Asset.Name,
+		Amount:              req.Asset.Amount,
+		EnableEmission:      req.Asset.NewGroupedAsset,
+		EnableUniCommitment: req.Asset.EnableUniCommitment,
+		Meta:                seedlingMeta,
 	}
 
 	rpcsLog.Infof("[MintAsset]: version=%v, type=%v, name=%v, amt=%v, "+
