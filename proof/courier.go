@@ -1046,9 +1046,12 @@ func (h *HashMailCourier) publishSubscriberEvent(event fn.Event) {
 
 // Close closes the underlying connection to the hashmail server.
 func (h *HashMailCourier) Close() error {
-	if err := h.mailbox.Close(); err != nil {
-		log.Warnf("Unable to close mailbox session: %v", err)
-		return err
+	if h.mailbox != nil {
+		err := h.mailbox.Close()
+		if err != nil {
+			log.Warnf("Unable to close mailbox session: %v", err)
+			return err
+		}
 	}
 
 	return nil
