@@ -86,7 +86,7 @@ func setupSupplyCommitTest(t *testing.T) *supplyCommitTestSetup {
 
 // addTestMintingBatch inserts a basic minting batch and related data using
 // harness components.
-func (h *supplyCommitTestHarness) addTestMintingBatch() (int64, int64,
+func (h *supplyCommitTestHarness) addTestMintingBatch() ([]byte, int64,
 	*wire.MsgTx, []byte, []byte) {
 
 	h.t.Helper()
@@ -95,9 +95,10 @@ func (h *supplyCommitTestHarness) addTestMintingBatch() (int64, int64,
 	db := h.db
 
 	batchKeyDesc, _ := test.RandKeyDesc(h.t)
+	batchKeyBytes := batchKeyDesc.PubKey.SerializeCompressed()
 	batchKeyID, err := db.UpsertInternalKey(
 		ctx, sqlc.UpsertInternalKeyParams{
-			RawKey:    batchKeyDesc.PubKey.SerializeCompressed(),
+			RawKey:    batchKeyBytes,
 			KeyFamily: int32(batchKeyDesc.Family),
 			KeyIndex:  int32(batchKeyDesc.Index),
 		},
@@ -149,7 +150,7 @@ func (h *supplyCommitTestHarness) addTestMintingBatch() (int64, int64,
 	)
 	require.NoError(h.t, err)
 
-	return batchKeyID, mintTxDbID, mintingTx, mintTxID[:], mintTxBytes
+	return batchKeyBytes, mintTxDbID, mintingTx, mintTxID[:], mintTxBytes
 }
 
 // stateTransitionOutput encapsulates the results of a simulated state
@@ -211,19 +212,30 @@ func newSupplyCommitTestHarness(t *testing.T) *supplyCommitTestHarness {
 
 // addTestMintAnchorUniCommitment inserts a mint_anchor_uni_commitments record
 // using harness data.
-func (h *supplyCommitTestHarness) addTestMintAnchorUniCommitment(batchID int64,
-	spentBy sql.NullInt64) int64 {
+func (h *supplyCommitTestHarness) addTestMintAnchorUniCommitment(
+	batchKeyBytes []byte, spentBy sql.NullInt64) int64 {
 
 	h.t.Helper()
 
-	internalKey := test.RandPubKey(h.t)
+	internalKey, _ := test.RandKeyDesc(h.t)
+	internalKeyID, err := h.db.UpsertInternalKey(
+		h.ctx, sqlc.UpsertInternalKeyParams{
+			RawKey:    internalKey.PubKey.SerializeCompressed(),
+			KeyFamily: int32(internalKey.KeyLocator.Family),
+			KeyIndex:  int32(internalKey.KeyLocator.Index),
+		},
+	)
+	require.NoError(h.t, err)
+
+	txOutputIndex := int32(test.RandInt[uint32]() % 100)
+
 	anchorCommitID, err := h.db.UpsertMintAnchorUniCommitment(
 		h.ctx, sqlc.UpsertMintAnchorUniCommitmentParams{
-			BatchID:            int32(batchID),
-			TxOutputIndex:      int32(test.RandInt[uint32]() % 100),
-			TaprootInternalKey: internalKey.SerializeCompressed(),
-			GroupKey:           h.groupKeyBytes,
-			SpentBy:            spentBy,
+			BatchKey:             batchKeyBytes,
+			TxOutputIndex:        txOutputIndex,
+			TaprootInternalKeyID: internalKeyID,
+			GroupKey:             h.groupKeyBytes,
+			SpentBy:              spentBy,
 		},
 	)
 	require.NoError(h.t, err)
@@ -1545,8 +1557,8 @@ func TestSupplyCommitUnspentPrecommits(t *testing.T) {
 	require.Empty(t, precommits)
 
 	// Next, we'll add a new minting batch, and a pre-commit along with it.
-	batchID1, _, mintTx1, _, _ := h.addTestMintingBatch()
-	_ = h.addTestMintAnchorUniCommitment(batchID1, sql.NullInt64{})
+	batchKeyBytes, _, mintTx1, _, _ := h.addTestMintingBatch()
+	_ = h.addTestMintAnchorUniCommitment(batchKeyBytes, sql.NullInt64{})
 
 	// At this point, we should find a single pre commitment on disk.
 	precommitsRes = h.commitMachine.UnspentPrecommits(h.ctx, spec)
@@ -1558,11 +1570,12 @@ func TestSupplyCommitUnspentPrecommits(t *testing.T) {
 	// Next, we'll add another pre commitment, and this time associate it
 	// (spend it) by a supply commitment.
 	//nolint:lll
-	batchID2, commitTxDbID2, _, commitTxid2, commitRawTx2 := h.addTestMintingBatch()
+	batchKeyBytes, commitTxDbID2, _, commitTxid2, commitRawTx2 :=
+		h.addTestMintingBatch()
 	commitID2 := h.addTestSupplyCommitment(
 		commitTxDbID2, commitTxid2, commitRawTx2, false,
 	)
-	_ = h.addTestMintAnchorUniCommitment(batchID2, sqlInt64(commitID2))
+	_ = h.addTestMintAnchorUniCommitment(batchKeyBytes, sqlInt64(commitID2))
 
 	// We should now find two pre-commitments.
 	precommitsRes = h.commitMachine.UnspentPrecommits(h.ctx, spec)
@@ -1637,7 +1650,8 @@ func TestSupplyCommitMachineFetch(t *testing.T) {
 	// Next, we'll add a new supply commitment, and also a state machine to
 	// go along with it which we'll link to the commitment.
 	//nolint:lll
-	_, commitTxDbID1, commitTx1, commitTxid1, commitRawTx1 := h.addTestMintingBatch()
+	_, commitTxDbID1, commitTx1, commitTxid1, commitRawTx1 :=
+		h.addTestMintingBatch()
 	commitID1 := h.addTestSupplyCommitment(
 		commitTxDbID1, commitTxid1, commitRawTx1, false,
 	)
