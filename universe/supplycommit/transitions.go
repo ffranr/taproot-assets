@@ -373,8 +373,11 @@ func newRootCommitment(ctx context.Context,
 		newCommitTx.AddTxIn(r.TxIn())
 	})
 
-	// If we have a prior root commitment, then we'll reuse the internal
-	// key. Otherwise, we'll generate a fresh one.
+	// With the inputs available, derive the supply commitment output.
+	//
+	// Determine the internal key to use for this output.
+	// If a prior root commitment exists, reuse its internal key;
+	// otherwise, generate a new one.
 	iKeyOpt := lfn.MapOption(func(r RootCommitment) *btcec.PublicKey {
 		return r.InternalKey
 	})(oldCommitment)
@@ -405,6 +408,17 @@ func newRootCommitment(ctx context.Context,
 		}
 	}
 
+	// Derive the new commitment output, and add that to the update
+	// transaction.
+	supplyTxOut, err := rootCommitTxOut(
+		commitInternalKey, nil, newSupplyRoot.NodeHash(),
+	)
+	if err != nil {
+		return lfn.Errf[RootCommitment]("unable to create "+
+			"commitment tx output: %w", err)
+	}
+	newCommitTx.AddTxOut(supplyTxOut)
+
 	// With the inputs added, we'll now create our new commitment output. We
 	// don't know the index yet, so we'll set this to 0. We'll also re-use
 	// the current internal key for now.
@@ -416,15 +430,6 @@ func newRootCommitment(ctx context.Context,
 		InternalKey: commitInternalKey,
 		SupplyRoot:  newSupplyRoot,
 	}
-
-	// Finally, we'll derive the new commitment output, and add that to the
-	// update transaction.
-	supplyTxOut, err := newSupplyCommit.TxOut()
-	if err != nil {
-		return lfn.Errf[RootCommitment]("unable to create "+
-			"commitment output: %w", err)
-	}
-	newCommitTx.AddTxOut(supplyTxOut)
 
 	return lfn.Ok(newSupplyCommit)
 }
