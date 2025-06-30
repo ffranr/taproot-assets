@@ -181,11 +181,19 @@ func (r *RootCommitment) TxIn() *wire.TxIn {
 //
 // TODO(roasbeef): expand, add support for tapscript as well
 func (r *RootCommitment) TxOut() (*wire.TxOut, error) {
-	// First, obtain the root hash of the supply tree.
-	supplyRootHash := r.SupplyRoot.NodeHash()
+	return rootCommitTxOut(
+		r.InternalKey, r.OutputKey, r.SupplyRoot.NodeHash(),
+	)
+}
+
+// rootCommitTxOut returns the transaction output that corresponds to the root
+// commitment. This is used to create a new commitment output.
+func rootCommitTxOut(internalKey *btcec.PublicKey,
+	tapOutKey *btcec.PublicKey, supplyRootHash mssmt.NodeHash) (*wire.TxOut,
+	error) {
 
 	var taprootKey *btcec.PublicKey
-	if r.OutputKey == nil {
+	if tapOutKey == nil {
 		// We'll create a new unspendable output that contains a
 		// commitment to the root.
 		//
@@ -201,10 +209,10 @@ func (r *RootCommitment) TxOut() (*wire.TxOut, error) {
 
 		rootHash := tapscriptTree.RootNode.TapHash()
 		taprootKey = txscript.ComputeTaprootOutputKey(
-			r.InternalKey, rootHash[:],
+			internalKey, rootHash[:],
 		)
 	} else {
-		taprootKey = r.OutputKey
+		taprootKey = tapOutKey
 	}
 
 	pkScript, err := txscript.PayToTaprootScript(taprootKey)
