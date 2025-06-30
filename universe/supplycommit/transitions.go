@@ -367,11 +367,23 @@ func newRootCommitment(ctx context.Context,
 		newCommitTx.AddTxIn(preCommit.TxIn())
 	}
 
-	// If there isn't an existing commitment in the chain, then we'll have
-	// one less input on the transaction.
+	// If all pre-commitments are spent, then we'll use the old commitment
+	// as an input to the new transaction. Pre-commitments are only present
+	// on mint transactions where as the old commitment is the last
+	// commitment that was broadcast.
+	//
+	// TODO(ffranr): Do we have everything we need to fund a PSBT here?
 	oldCommitment.WhenSome(func(r RootCommitment) {
 		newCommitTx.AddTxIn(r.TxIn())
 	})
+
+	// Ensure that at least one input is present in the transaction.
+	if len(newCommitTx.TxIn) == 0 {
+		return lfn.Err[RootCommitment](
+			fmt.Errorf("no inputs available for new commitment " +
+				"transaction"),
+		)
+	}
 
 	// With the inputs available, derive the supply commitment output.
 	//
